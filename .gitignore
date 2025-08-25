@@ -187,6 +187,7 @@ temp/
 # IDE files
 .vscode/
 .idea/
+.windsurf/
 *.swp
 *.swo
 *~
