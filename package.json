@@ -1,0 +1,53 @@
+{
+  "name": "html-receiver",
+  "version": "1.0.0",
+  "description": "Robust HTML fetcher API and CLI with HTTP/Headless adapters and proxy rotation",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:verbose": "node src/start.js --verbose",
+    "dev": "cross-env NODE_ENV=development VERBOSE=true node src/index.js",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watchAll"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bin": {
+    "html-fetch": "bin/html-fetch.js"
+  },
+  "dependencies": {
+    "@crawlee/cheerio": "^3.14.1",
+    "@crawlee/playwright": "^3.14.1",
+    "@crawlee/puppeteer": "^3.14.1",
+    "axios": "^1.11.0",
+    "commander": "^14.0.0",
+    "crawlee": "^3.14.1",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
+    "pino": "^9.9.0",
+    "playwright": "^1.55.0",
+    "puppeteer": "^24.17.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "undici": "^7.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "cross-env": "^10.0.0",
+    "deep-equal": "^2.2.3",
+    "jest": "^30.0.5",
+    "nock": "^14.0.10",
+    "pino-pretty": "^11.3.0",
+    "supertest": "^7.1.4"
+  },
+  "overrides": {
+    "inflight": "npm:@isaacs/inflight@^1.0.6",
+    "rimraf": "^5.0.0",
+    "glob": "^10.0.0",
+    "lodash.isequal": "npm:deep-equal@^2.2.3"
+  }
+}
