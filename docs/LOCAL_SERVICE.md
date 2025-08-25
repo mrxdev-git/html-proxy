@@ -64,10 +64,10 @@ sudo apt-get install -y \
 
 ```bash
 # Download and run the setup script
-curl -sSL https://raw.githubusercontent.com/mrxdev-git/node-html-receiver/main/scripts/setup-local-daemon.sh | bash
+curl -sSL https://raw.githubusercontent.com/mrxdev-git/html-proxy/main/scripts/setup-local-daemon.sh | bash
 
 # Or with custom options
-curl -sSL https://raw.githubusercontent.com/mrxdev-git/node-html-receiver/main/scripts/setup-local-daemon.sh | bash -s -- --port 3456 --dir ~/services
+curl -sSL https://raw.githubusercontent.com/mrxdev-git/html-proxy/main/scripts/setup-local-daemon.sh | bash -s -- --port 3456 --dir ~/services
 ```
 
 ### Option 2: Manual Setup
@@ -77,8 +77,8 @@ curl -sSL https://raw.githubusercontent.com/mrxdev-git/node-html-receiver/main/s
 mkdir -p ~/apps && cd ~/apps
 
 # Clone repository
-git clone https://github.com/mrxdev-git/node-html-receiver.git
-cd node-html-receiver
+git clone https://github.com/mrxdev-git/html-proxy.git
+cd html-proxy
 
 # Install dependencies
 npm ci
@@ -158,14 +158,14 @@ curl -I http://SERVER_IP:3456/healthz  # Connection refused
 mkdir -p ~/.config/systemd/user
 
 # Create service file
-cat > ~/.config/systemd/user/node-html-receiver.service <<'EOF'
+cat > ~/.config/systemd/user/html-proxy.service <<'EOF'
 [Unit]
 Description=Node HTML Receiver (Local)
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/apps/node-html-receiver
+WorkingDirectory=%h/apps/html-proxy
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 ExecStart=/usr/bin/node src/server.js
@@ -177,7 +177,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=%h/apps/node-html-receiver/storage
+ReadWritePaths=%h/apps/html-proxy/storage
 
 # Resource limits
 MemoryMax=2G
@@ -192,17 +192,17 @@ loginctl enable-linger "$USER"
 
 # Start service
 systemctl --user daemon-reload
-systemctl --user enable --now node-html-receiver
+systemctl --user enable --now html-proxy
 
 # Check status
-systemctl --user status node-html-receiver
+systemctl --user status html-proxy
 ```
 
 ### System-Level Service (Alternative)
 
 ```bash
 # Create system service
-sudo tee /etc/systemd/system/node-html-receiver.service >/dev/null <<'EOF'
+sudo tee /etc/systemd/system/html-proxy.service >/dev/null <<'EOF'
 [Unit]
 Description=Node HTML Receiver (Local)
 After=network.target
@@ -211,7 +211,7 @@ After=network.target
 Type=simple
 User=$USER
 Group=$USER
-WorkingDirectory=/home/$USER/apps/node-html-receiver
+WorkingDirectory=/home/$USER/apps/html-proxy
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3456
@@ -231,8 +231,8 @@ EOF
 
 # Start service
 sudo systemctl daemon-reload
-sudo systemctl enable --now node-html-receiver
-sudo systemctl status node-html-receiver
+sudo systemctl enable --now html-proxy
+sudo systemctl status html-proxy
 ```
 
 ---
@@ -278,16 +278,16 @@ curl http://localhost:3456/crawlers/status | jq .
 
 ```bash
 # Basic fetch
-~/apps/node-html-receiver/bin/html-fetch https://example.com
+~/apps/html-proxy/bin/html-fetch https://example.com
 
 # With specific mode
-~/apps/node-html-receiver/bin/html-fetch https://example.com -m browser
+~/apps/html-proxy/bin/html-fetch https://example.com -m browser
 
 # Save to file
-~/apps/node-html-receiver/bin/html-fetch https://example.com -o output.html
+~/apps/html-proxy/bin/html-fetch https://example.com -o output.html
 
 # With custom headers
-~/apps/node-html-receiver/bin/html-fetch https://example.com \
+~/apps/html-proxy/bin/html-fetch https://example.com \
   -H "User-Agent: Custom/1.0" \
   -H "Accept-Language: en-US"
 ```
@@ -300,46 +300,46 @@ curl http://localhost:3456/crawlers/status | jq .
 
 ```bash
 # Start/Stop/Restart
-systemctl --user start node-html-receiver
-systemctl --user stop node-html-receiver
-systemctl --user restart node-html-receiver
+systemctl --user start html-proxy
+systemctl --user stop html-proxy
+systemctl --user restart html-proxy
 
 # Enable/Disable auto-start
-systemctl --user enable node-html-receiver
-systemctl --user disable node-html-receiver
+systemctl --user enable html-proxy
+systemctl --user disable html-proxy
 
 # Check status
-systemctl --user status node-html-receiver
+systemctl --user status html-proxy
 ```
 
 ### Log Management
 
 ```bash
 # View logs
-journalctl --user -u node-html-receiver -f
+journalctl --user -u html-proxy -f
 
 # Last 100 lines
-journalctl --user -u node-html-receiver -n 100
+journalctl --user -u html-proxy -n 100
 
 # Logs from last hour
-journalctl --user -u node-html-receiver --since "1 hour ago"
+journalctl --user -u html-proxy --since "1 hour ago"
 
 # Export logs
-journalctl --user -u node-html-receiver > receiver.log
+journalctl --user -u html-proxy > receiver.log
 ```
 
 ### Updating the Service
 
 ```bash
 # Pull latest code
-cd ~/apps/node-html-receiver
+cd ~/apps/html-proxy
 git pull
 
 # Update dependencies
 npm ci
 
 # Restart service
-systemctl --user restart node-html-receiver
+systemctl --user restart html-proxy
 ```
 
 ---
@@ -357,13 +357,13 @@ while true; do
   echo "=== Node HTML Receiver Monitor ==="
   echo
   echo "Service Status:"
-  systemctl --user status node-html-receiver --no-pager | head -n 5
+  systemctl --user status html-proxy --no-pager | head -n 5
   echo
   echo "Cache Stats:"
   curl -s http://localhost:3456/cache/stats | jq .
   echo
   echo "Recent Logs:"
-  journalctl --user -u node-html-receiver -n 5 --no-pager
+  journalctl --user -u html-proxy -n 5 --no-pager
   sleep 5
 done
 EOF
@@ -378,7 +378,7 @@ chmod +x ~/monitor-receiver.sh
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'html-receiver'
+  - job_name: 'html-proxy'
     static_configs:
       - targets: ['localhost:3456']
     metrics_path: '/metrics'
@@ -405,7 +405,7 @@ sudo netstat -tlnp | grep 3456
 node -v  # Should be 20.x or higher
 
 # Check logs for errors
-journalctl --user -u node-html-receiver -n 50
+journalctl --user -u html-proxy -n 50
 ```
 
 #### Browser Mode Not Working
@@ -414,7 +414,7 @@ journalctl --user -u node-html-receiver -n 50
 sudo apt-get install -y $(npx playwright install-deps chromium)
 
 # Test Playwright
-cd ~/apps/node-html-receiver
+cd ~/apps/html-proxy
 npx playwright test
 ```
 

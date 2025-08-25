@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  html-receiver:
+  html-proxy:
     build:
       context: .
       target: production
@@ -34,7 +34,7 @@ services:
       - VERBOSE=${VERBOSE:-false}
       - LOG_LEVEL=${LOG_LEVEL:-}
     volumes:
-      - html-receiver-storage:/app/storage
+      - html-proxy-storage:/app/storage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "const http = require('http'); const options = { hostname: 'localhost', port: 8080, path: '/healthz', timeout: 5000 }; const req = http.request(options, (res) => { if (res.statusCode === 200) { process.exit(0); } else { process.exit(1); } }); req.on('error', () => { process.exit(1); }); req.end();"]
@@ -56,5 +56,5 @@ services:
       - /app/storage:noexec,nosuid,size=500m
 
 volumes:
-  html-receiver-storage:
+  html-proxy-storage:
     driver: local

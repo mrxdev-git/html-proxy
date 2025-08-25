@@ -49,7 +49,7 @@ check_docker() {
 # Build Docker image
 build_image() {
     log_info "Building Docker image..."
-    docker build -t html-receiver:latest .
+    docker build -t html-proxy:latest .
     log_success "Docker image built successfully"
 }
 
@@ -134,11 +134,11 @@ clean_docker() {
 # Show status
 show_status() {
     log_info "Docker containers status:"
-    docker ps --filter "name=html-receiver" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    docker ps --filter "name=html-proxy" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
     
     echo
     log_info "Docker images:"
-    docker images --filter "reference=html-receiver*" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+    docker images --filter "reference=html-proxy*" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
 }
 
 # Health check

@@ -65,8 +65,8 @@ A high-performance, production-ready service that fetches real HTML content from
 
 ```bash
 # Clone repository
-git clone https://github.com/mrxdev-git/node-html-receiver.git
-cd node-html-receiver
+git clone https://github.com/mrxdev-git/html-proxy.git
+cd html-proxy
 
 # Install dependencies
 npm ci

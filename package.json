@@ -1,5 +1,5 @@
 {
-  "name": "html-receiver",
+  "name": "html-proxy",
   "version": "1.0.0",
   "description": "Robust HTML fetcher API and CLI with HTTP/Headless adapters and proxy rotation",
   "main": "src/index.js",

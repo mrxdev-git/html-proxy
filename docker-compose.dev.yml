@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  html-receiver-dev:
+  html-proxy-dev:
     build:
       context: .
       target: development
@@ -35,10 +35,10 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - html-receiver-dev-storage:/app/storage
+      - html-proxy-dev-storage:/app/storage
     restart: unless-stopped
     command: npm run dev
 
 volumes:
-  html-receiver-dev-storage:
+  html-proxy-dev-storage:
     driver: local

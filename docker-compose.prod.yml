@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  html-receiver:
+  html-proxy:
     deploy:
       replicas: 2
       restart_policy:
@@ -36,7 +36,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - html-receiver-network
+      - html-proxy-network
 
   # Optional: Add a reverse proxy for load balancing
   nginx:
@@ -48,9 +48,9 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
-      - html-receiver
+      - html-proxy
     networks:
-      - html-receiver-network
+      - html-proxy-network
     restart: unless-stopped
 
   # Optional: Add monitoring with Prometheus metrics
@@ -69,11 +69,11 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - html-receiver-network
+      - html-proxy-network
     restart: unless-stopped
 
 networks:
-  html-receiver-network:
+  html-proxy-network:
     driver: bridge
 
 volumes:

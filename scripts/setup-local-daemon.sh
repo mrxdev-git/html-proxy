@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # setup-local-daemon.sh
-# Install and run node-html-receiver as a local-only daemon on Ubuntu 22.04+
+# Install and run html-proxy as a local-only daemon on Ubuntu 22.04+
 # - Clones repo or uses existing installation
 # - Installs Node.js LTS if missing
 # - Installs Chrome/Chromium for Playwright
@@ -10,16 +10,16 @@ set -euo pipefail
 # - Configures service for local-only access
 #
 # Usage:
-#   ./scripts/setup-local-daemon.sh [--port 3456] [--dir $HOME/apps/node-html-receiver]
+#   ./scripts/setup-local-daemon.sh [--port 3456] [--dir $HOME/apps/html-proxy]
 #
 # Notes:
 # - Requires sudo for installing packages.
 # - Service will auto-start on boot for the current user (via systemd user + lingering).
 # - Includes browser dependencies for Crawlee/Playwright support.
 
-REPO_URL="https://github.com/mrxdev-git/node-html-receiver.git"
-APP_DEFAULT_DIR="$HOME/apps/node-html-receiver"
-SERVICE_NAME="node-html-receiver"
+REPO_URL="https://github.com/mrxdev-git/html-proxy.git"
+APP_DEFAULT_DIR="$HOME/apps/html-proxy"
+SERVICE_NAME="html-proxy"
 PORT="3456"
 APP_DIR="${APP_DEFAULT_DIR}"
 

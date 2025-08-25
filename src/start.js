@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const program = new Command();
 
 program
-  .name('node-html-receiver')
+  .name('html-proxy')
   .description('Start the Node HTML Receiver server')
   .option('-v, --verbose', 'Enable verbose logging')
   .option('-p, --port <port>', 'Port to listen on', '3456')

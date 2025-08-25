@@ -7,16 +7,16 @@ rule_files:
   # - "second_rules.yml"
 
 scrape_configs:
-  - job_name: 'html-receiver'
+  - job_name: 'html-proxy'
     static_configs:
-      - targets: ['html-receiver:8080']
+      - targets: ['html-proxy:8080']
     metrics_path: '/metrics'
     scrape_interval: 30s
     scrape_timeout: 10s
     
-  - job_name: 'html-receiver-health'
+  - job_name: 'html-proxy-health'
     static_configs:
-      - targets: ['html-receiver:8080']
+      - targets: ['html-proxy:8080']
     metrics_path: '/healthz'
     scrape_interval: 10s
     scrape_timeout: 5s

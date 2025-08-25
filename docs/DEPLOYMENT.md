@@ -45,8 +45,8 @@ newgrp docker
 #### 2. Clone and Configure
 ```bash
 # Clone the repository
-git clone <repository-url> html-receiver
-cd html-receiver
+git clone <repository-url> html-proxy
+cd html-proxy
 
 # Create environment configuration
 cp .env.docker .env.local
@@ -89,7 +89,7 @@ nano .env.local
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Scale horizontally
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale html-receiver=3
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale html-proxy=3
 ```
 
 #### Load Balancing with Nginx
@@ -136,10 +136,10 @@ MAX_SESSIONS=20
 #### Backup and Persistence
 ```bash
 # Backup Docker volumes
-docker run --rm -v html-receiver_html-receiver-storage:/data -v $(pwd):/backup alpine tar czf /backup/storage-backup.tar.gz -C /data .
+docker run --rm -v html-proxy_html-proxy-storage:/data -v $(pwd):/backup alpine tar czf /backup/storage-backup.tar.gz -C /data .
 
 # Restore from backup
-docker run --rm -v html-receiver_html-receiver-storage:/data -v $(pwd):/backup alpine tar xzf /backup/storage-backup.tar.gz -C /data
+docker run --rm -v html-proxy_html-proxy-storage:/data -v $(pwd):/backup alpine tar xzf /backup/storage-backup.tar.gz -C /data
 ```
 
 #### Monitoring Endpoints
@@ -152,10 +152,10 @@ docker run --rm -v html-receiver_html-receiver-storage:/data -v $(pwd):/backup a
 #### Troubleshooting Docker Deployment
 ```bash
 # View container logs
-docker-compose logs html-receiver
+docker-compose logs html-proxy
 
 # Execute commands in container
-docker-compose exec html-receiver sh
+docker-compose exec html-proxy sh
 
 # Restart services
 docker-compose restart
@@ -243,8 +243,8 @@ sudo -iu deploy
 mkdir -p ~/apps && cd ~/apps
 
 # Clone the repository
-git clone https://github.com/mrxdev-git/node-html-receiver.git
-cd node-html-receiver
+git clone https://github.com/mrxdev-git/html-proxy.git
+cd html-proxy
 
 # Install production dependencies
 npm ci --production
@@ -309,13 +309,13 @@ CRAWLER_IDLE_TIMEOUT_MS=300000
 
 # Proxy Configuration (if using)
 # PROXIES=http://proxy1:8080,http://proxy2:8080
-# PROXIES_FILE=/etc/node-html-receiver/proxies.txt
+# PROXIES_FILE=/etc/html-proxy/proxies.txt
 ```
 
 ### System-wide Configuration (for systemd)
 
 ```bash
-sudo tee /etc/node-html-receiver.env >/dev/null <<'EOF'
+sudo tee /etc/html-proxy.env >/dev/null <<'EOF'
 PORT=3456
 NODE_ENV=production
 DEFAULT_MODE=adaptive
@@ -325,7 +325,7 @@ ALLOW_PRIVATE_NETWORKS=false
 BLOCKLIST_HOSTS=metadata.google.internal,169.254.169.254,*.internal
 EOF
 
-sudo chmod 600 /etc/node-html-receiver.env
+sudo chmod 600 /etc/html-proxy.env
 ```
 
 If using PM2, you can keep `.env` in the repo root or export vars in your shell.
@@ -337,7 +337,7 @@ If using PM2, you can keep `.env` in the repo root or export vars in your shell.
 sudo apt-get install -y nginx
 
 # Create an upstream and server block
-sudo tee /etc/nginx/sites-available/html-receiver.conf >/dev/null <<'EOF'
+sudo tee /etc/nginx/sites-available/html-proxy.conf >/dev/null <<'EOF'
 upstream html_receiver_upstream {
     # For Option A (PM2 cluster), all instances share port 3456
     server 127.0.0.1:3456;
@@ -398,7 +398,7 @@ server {
 }
 EOF
 
-sudo ln -s /etc/nginx/sites-available/html-receiver.conf /etc/nginx/sites-enabled/html-receiver.conf
+sudo ln -s /etc/nginx/sites-available/html-proxy.conf /etc/nginx/sites-enabled/html-proxy.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -430,10 +430,10 @@ pm2 set pm2-logrotate:compress true
 ### 7A) Start the app in cluster mode
 From the project directory:
 ```bash
-cd ~/apps/node-html-receiver
+cd ~/apps/html-proxy
 # Ensure NODE_ENV and PORT are exported or present in .env
 # Start with cluster mode (auto-scale to CPU cores)
-pm2 start src/server.js -i max --name html-receiver \
+pm2 start src/server.js -i max --name html-proxy \
   --merge-logs \
   --log-date-format="YYYY-MM-DD HH:mm:ss Z" \
   --update-env
@@ -447,11 +447,11 @@ pm2 startup systemd -u $(whoami) --hp $(eval echo ~$(whoami))
 Useful commands:
 ```bash
 pm2 list
-pm2 status html-receiver
-pm2 logs html-receiver
-pm2 reload html-receiver   # zero-downtime reload
-pm2 restart html-receiver  # restart
-pm2 stop html-receiver
+pm2 status html-proxy
+pm2 logs html-proxy
+pm2 reload html-proxy   # zero-downtime reload
+pm2 restart html-proxy  # restart
+pm2 stop html-proxy
 ```
 
 Nginx upstream section for PM2 cluster can remain as a single `server 127.0.0.1:8080;` because PM2 uses a single port with multiple workers behind the same process name.
@@ -465,27 +465,27 @@ Run several app instances on different ports, and let Nginx round-robin them.
 ```bash
 # As root
 useradd -r -s /usr/sbin/nologin nodehtml || true
-mkdir -p /opt/node-html-receiver
-chown -R nodehtml:nodehtml /opt/node-html-receiver
+mkdir -p /opt/html-proxy
+chown -R nodehtml:nodehtml /opt/html-proxy
 
 # Deploy code (simple copy or CI/CD)
-rsync -a --delete /home/deploy/apps/node-html-receiver/ /opt/node-html-receiver/
-chown -R nodehtml:nodehtml /opt/node-html-receiver
+rsync -a --delete /home/deploy/apps/html-proxy/ /opt/html-proxy/
+chown -R nodehtml:nodehtml /opt/html-proxy
 ```
 
 ### 7B) systemd unit template
 ```bash
-sudo tee /etc/systemd/system/node-html-receiver@.service >/dev/null <<'EOF'
+sudo tee /etc/systemd/system/html-proxy@.service >/dev/null <<'EOF'
 [Unit]
-Description=node-html-receiver instance %i
+Description=html-proxy instance %i
 After=network.target
 
 [Service]
 Type=simple
 User=nodehtml
 Group=nodehtml
-WorkingDirectory=/opt/node-html-receiver
-EnvironmentFile=/etc/node-html-receiver.env
+WorkingDirectory=/opt/html-proxy
+EnvironmentFile=/etc/html-proxy.env
 # Override PORT per instance with systemd drop-in or via ExecStart env
 ExecStart=/usr/bin/env PORT=%i NODE_ENV=production /usr/bin/node src/server.js
 Restart=always
@@ -505,13 +505,13 @@ EOF
 Start multiple instances on different ports:
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now node-html-receiver@3456
-sudo systemctl enable --now node-html-receiver@3457
-sudo systemctl enable --now node-html-receiver@3458
-sudo systemctl enable --now node-html-receiver@3459
+sudo systemctl enable --now html-proxy@3456
+sudo systemctl enable --now html-proxy@3457
+sudo systemctl enable --now html-proxy@3458
+sudo systemctl enable --now html-proxy@3459
 
-systemctl status node-html-receiver@3456 --no-pager -l
-journalctl -u node-html-receiver@3456 -f
+systemctl status html-proxy@3456 --no-pager -l
+journalctl -u html-proxy@3456 -f
 ```
 
 Update Nginx upstream to include all ports:
@@ -531,13 +531,13 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Zero-downtime deployments can be done by restarting instances in a rolling fashion:
 ```bash
-sudo systemctl restart node-html-receiver@3456
+sudo systemctl restart html-proxy@3456
 sleep 3
-sudo systemctl restart node-html-receiver@3457
+sudo systemctl restart html-proxy@3457
 sleep 3
-sudo systemctl restart node-html-receiver@3458
+sudo systemctl restart html-proxy@3458
 sleep 3
-sudo systemctl restart node-html-receiver@3459
+sudo systemctl restart html-proxy@3459
 ```
 
 ---
@@ -587,7 +587,7 @@ sudo apt-get install -y prometheus-node-exporter
 # Configure Prometheus to scrape /metrics endpoint
 # Add to prometheus.yml:
 scrape_configs:
-  - job_name: 'html-receiver'
+  - job_name: 'html-proxy'
     static_configs:
       - targets: ['localhost:3456']
 ```
@@ -596,10 +596,10 @@ scrape_configs:
 
 ```bash
 # PM2 logs (Option A)
-pm2 logs html-receiver --lines 100
+pm2 logs html-proxy --lines 100
 
 # Systemd logs (Option B)
-journalctl -u node-html-receiver@3456 -f --since "1 hour ago"
+journalctl -u html-proxy@3456 -f --since "1 hour ago"
 
 # Aggregate logs with ELK or Loki
 ```
@@ -611,7 +611,7 @@ journalctl -u node-html-receiver@3456 -f --since "1 hour ago"
 - Maintain a strong `BLOCKLIST_HOSTS`.
 - Avoid exposing the app port (8080/808x) publicly; only expose Nginx 80/443.
 - Keep Node and system packages updated.
-- Don’t commit secrets; manage environment variables securely (e.g., in `/etc/node-html-receiver.env`).
+- Don’t commit secrets; manage environment variables securely (e.g., in `/etc/html-proxy.env`).
 
 ---
 
@@ -622,10 +622,10 @@ journalctl -u node-html-receiver@3456 -f --since "1 hour ago"
 #### Nginx 502/504 Errors
 ```bash
 # Check service status
-pm2 status  # or systemctl status node-html-receiver@*
+pm2 status  # or systemctl status html-proxy@*
 
 # Check logs
-pm2 logs html-receiver --err
+pm2 logs html-proxy --err
 journalctl -xe
 
 # Verify ports
@@ -661,7 +661,7 @@ MAX_CRAWLERS=3  # in .env
 curl http://localhost:3456/cache/stats
 
 # Clear cache (restart service)
-pm2 restart html-receiver
+pm2 restart html-proxy
 ```
 
 ### Performance Tuning
@@ -723,4 +723,4 @@ Your Node HTML Receiver is now running in production with:
 - Comprehensive monitoring
 - Enterprise-grade security
 
-For support and updates, check the [GitHub repository](https://github.com/mrxdev-git/node-html-receiver).
+For support and updates, check the [GitHub repository](https://github.com/mrxdev-git/html-proxy.git).
