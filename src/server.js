@@ -2,34 +2,87 @@ import express from 'express';
 import { FetcherService } from './services/fetcherService.js';
 import { logger, verbose } from './logger.js';
 import { getMonitoringService } from './services/monitoringService.js';
+import { getArchitectureIntegration } from './services/ArchitectureIntegration.js';
+import EnhancedFetcherService from './services/EnhancedFetcherService.js';
 
 export function buildApp(config) {
   const app = express();
-  const fetcherService = new FetcherService(config);
   
-  // Store fetcher service reference for cleanup in tests
+  // Determine architecture mode
+  const architectureMode = process.env.ARCHITECTURE_MODE || 'legacy';
+  let fetcherService;
+  let architecture = null;
+  
+  if (architectureMode === 'enhanced') {
+    // Initialize enhanced architecture
+    logger.info('Using enhanced architecture');
+    architecture = getArchitectureIntegration(config);
+    
+    // Initialize architecture synchronously for now
+    // In production, this should be done asynchronously before starting server
+    architecture.initialize().catch(err => {
+      logger.error('Failed to initialize enhanced architecture', err);
+    });
+    
+    // Use enhanced fetcher if available, otherwise fallback to legacy
+    fetcherService = architecture.enhancedFetcher || new FetcherService(config);
+  } else {
+    // Use legacy architecture
+    logger.info('Using legacy architecture');
+    fetcherService = new FetcherService(config);
+  }
+  
+  // Store references for cleanup in tests
   app._fetcherService = fetcherService;
+  app._architecture = architecture;
   const monitoring = getMonitoringService();
 
   app.set('trust proxy', true);
 
   // Basic health check
-  app.get('/healthz', (_req, res) => {
-    const health = monitoring.getHealth();
-    const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
-    res.status(statusCode).json(health);
+  app.get('/healthz', async (_req, res) => {
+    try {
+      let health;
+      if (architecture && architecture.healthCheck) {
+        health = await architecture.healthCheck();
+      } else {
+        health = monitoring.getHealth();
+      }
+      const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
+      res.status(statusCode).json(health);
+    } catch (error) {
+      res.status(503).json({ status: 'error', error: error.message });
+    }
   });
   
   // Detailed metrics endpoint
   app.get('/metrics', (_req, res) => {
-    const metrics = monitoring.getMetrics();
-    res.json(metrics);
+    try {
+      let metrics;
+      if (architecture && architecture.metricsCollector) {
+        metrics = architecture.metricsCollector.exportMetrics();
+      } else {
+        metrics = monitoring.getMetrics();
+      }
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
   
   // Adapter statistics
   app.get('/stats/adapters', (_req, res) => {
-    const stats = monitoring.getAdapterStats();
-    res.json(stats);
+    try {
+      let stats;
+      if (architecture && architecture.getStatistics) {
+        stats = architecture.getStatistics();
+      } else {
+        stats = monitoring.getAdapterStats();
+      }
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
   
   // Cache statistics
@@ -85,5 +138,51 @@ export function buildApp(config) {
     }
   });
 
+  // Enhanced architecture monitoring endpoints
+  if (architecture) {
+    // Configuration endpoint
+    app.get('/config', (req, res) => {
+      const config = {
+        architectureMode,
+        features: architecture.config.features || {},
+        pools: architecture.config.pools || {}
+      };
+      res.json(config);
+    });
+    
+    // Active requests endpoint
+    app.get('/requests/active', (req, res) => {
+      try {
+        const activeRequests = architecture.enhancedFetcher
+          ? architecture.enhancedFetcher.getActiveRequests ? architecture.enhancedFetcher.getActiveRequests() : []
+          : [];
+        
+        res.json({
+          count: activeRequests.length,
+          requests: activeRequests
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+  }
+  
+  // Graceful shutdown handler
+  app.shutdown = async () => {
+    logger.info('Shutting down server');
+    
+    // Shutdown architecture if using enhanced mode
+    if (architecture && architecture.shutdown) {
+      await architecture.shutdown();
+    }
+    
+    // Close legacy fetcher service
+    if (fetcherService && fetcherService.close) {
+      await fetcherService.close();
+    }
+    
+    logger.info('Server shutdown complete');
+  };
+  
   return app;
 }

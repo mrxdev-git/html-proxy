@@ -64,6 +64,15 @@ async function startServer() {
         logger.info({ sig }, 'Shutting down gracefully');
       }
       
+      // Call app shutdown handler if available (for enhanced architecture)
+      if (app.shutdown) {
+        try {
+          await app.shutdown();
+        } catch (error) {
+          logger.error({ error: error.message }, 'Error during app shutdown');
+        }
+      }
+      
       // Close server
       server.close(() => {
         if (verbose) {
