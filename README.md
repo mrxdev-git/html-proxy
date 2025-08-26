@@ -6,6 +6,7 @@ A high-performance, production-ready service that fetches real HTML content from
 
 ## 🎯 Key Highlights
 
+- **Enhanced Architecture**: Resource pooling, intelligent routing, and circuit breakers
 - **Multiple Adapter Strategies**: HTTP, Browser, Crawlee (HTTP/Browser), and Adaptive modes
 - **Advanced Anti-Detection**: Real browser fingerprints, session management, behavioral patterns
 - **Intelligent Caching**: LRU cache with configurable TTL and size limits
@@ -19,10 +20,10 @@ A high-performance, production-ready service that fetches real HTML content from
 ### 🔧 Core Adapters
 | Adapter | Description | Use Case |
 |---------|-------------|----------|
-| **HTTP** | Fast axios-based with browser headers | Static content, APIs |
-| **Browser** | Puppeteer with stealth plugins | JavaScript-heavy SPAs |
-| **Crawlee-HTTP** | Enhanced HTTP with fingerprinting | Anti-bot protected sites |
-| **Crawlee-Browser** | Advanced browser automation | Maximum stealth needed |
+| **EnhancedCrawleeHttp** | Crawlee HTTP with resource pooling | High-performance HTTP fetching |
+| **EnhancedCrawleeBrowser** | Crawlee browser with browser pool | Advanced browser automation |
+| **EnhancedHttp** | HTTP adapter with connection pooling | Static content, APIs |
+| **EnhancedBrowser** | Browser adapter with resource management | JavaScript-heavy SPAs |
 | **Adaptive** | Intelligent mode switching | Automatic optimization |
 
 ### 🛡️ Anti-Detection & Stealth
@@ -88,6 +89,7 @@ DEFAULT_MODE=adaptive       # Default fetching mode
 TIMEOUT_MS=30000           # Request timeout
 MAX_RETRIES=3              # Retry attempts
 USER_AGENT="Mozilla/5.0..." # Default user agent
+ARCHITECTURE_MODE=enhanced  # Architecture mode (legacy|enhanced)
 ```
 
 #### Caching
@@ -107,6 +109,31 @@ PROXIES_FILE=/path/to/proxies.txt  # Alternative: file-based
 ```env
 ALLOW_PRIVATE_NETWORKS=false  # SSRF protection
 BLOCKLIST_HOSTS=*.internal,*.local,metadata.google
+```
+
+#### Enhanced Architecture Settings
+```env
+# Resource Pooling
+ENABLE_RESOURCE_POOLING=true
+HTTP_POOL_MIN_SIZE=5
+HTTP_POOL_MAX_SIZE=50
+BROWSER_POOL_MIN_SIZE=2
+BROWSER_POOL_MAX_SIZE=10
+
+# Intelligent Routing
+ENABLE_INTELLIGENT_ROUTING=true
+ROUTING_STRATEGY=ml_based  # rule_based|ml_based|hybrid
+
+# Circuit Breakers
+CIRCUIT_BREAKER_ENABLED=true
+CIRCUIT_BREAKER_THRESHOLD=5
+CIRCUIT_BREAKER_TIMEOUT_MS=60000
+
+# Monitoring
+ENABLE_MONITORING=true
+MONITORING_PORT=3002
+METRICS_ENABLED=true
+METRICS_FLUSH_INTERVAL_MS=10000
 ```
 
 #### Advanced Anti-Detection
@@ -300,17 +327,51 @@ Fetch HTML content from a URL
 ```
 
 ### GET /healthz
-Health check endpoint
+Health check endpoint with architecture status
 
 ### GET /metrics
-Prometheus-compatible metrics
+Prometheus-compatible metrics with enhanced architecture metrics
 
-### GET /cache/stats
+### GET /stats/adapters
+Adapter performance statistics and circuit breaker status
+
+### GET /stats/cache
 Cache performance statistics
+
+### GET /stats/pool
+Resource pool statistics (browser and HTTP connection pools)
+
+### GET /config
+Current architecture configuration and feature flags
+
+### GET /requests/active
+Active request tracking (enhanced architecture only)
 
 ## 🎯 Architecture & Scaling
 
 ### System Architecture
+
+#### Enhanced Architecture (ARCHITECTURE_MODE=enhanced)
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
+│   Client    │────▶│   Express    │────▶│ Architecture     │
+└─────────────┘     │    Server    │     │ Integration      │
+                    └──────────────┘     └──────────────────┘
+                            │                     │
+                    ┌───────▼──────┐      ┌──────▼──────────┐
+                    │   Metrics    │      │ AdapterRouter   │
+                    │  Collector   │      │ (ML-based)      │
+                    └──────────────┘      └─────────────────┘
+                                                 │
+                                    ┌────────────┼────────────┐
+                                    │            │            │
+                            ┌───────▼──────┐ ┌──▼───┐ ┌──────▼──────┐
+                            │Resource Pool │ │Cache │ │  Enhanced   │
+                            │  Manager     │ │      │ │  Adapters   │
+                            └──────────────┘ └──────┘ └─────────────┘
+```
+
+#### Legacy Architecture (ARCHITECTURE_MODE=legacy)
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │   Client    │────▶│   Express    │────▶│  Fetcher    │
@@ -384,22 +445,30 @@ npm test -- --detectOpenHandles
 ```
 ├── src/
 │   ├── adapters/          # Fetching strategies
-│   │   ├── base.js        # Base adapter class
-│   │   ├── http.js        # Axios HTTP adapter
-│   │   ├── browser.js     # Puppeteer adapter
-│   │   ├── crawleeHttp.js # Crawlee HTTP adapter
-│   │   └── crawleeBrowser.js # Crawlee browser adapter
+│   │   ├── interfaces/    # Adapter interfaces
+│   │   │   └── ITransportAdapter.js
+│   │   ├── managers/      # Resource managers
+│   │   │   ├── AdapterRouter.js
+│   │   │   └── ResourceManager.js
+│   │   ├── pools/         # Resource pools
+│   │   │   ├── BrowserPool.js
+│   │   │   └── HttpConnectionPool.js
+│   │   ├── EnhancedCrawleeHttpAdapter.js
+│   │   ├── EnhancedCrawleeBrowserAdapter.js
+│   │   ├── EnhancedHttpAdapter.js
+│   │   └── EnhancedBrowserAdapter.js
 │   ├── config/            # Configuration management
 │   ├── proxy/             # Proxy pool and rotation
 │   ├── services/          # Core services
-│   │   ├── fetcherService.js # Main fetching logic
-│   │   ├── cacheService.js   # LRU cache implementation
-│   │   ├── crawleeService.js # Crawlee integration
-│   │   └── crawlerPool.js    # Crawler lifecycle management
+│   │   ├── ArchitectureIntegration.js # Enhanced architecture
+│   │   ├── EnhancedFetcherService.js  # Enhanced fetcher
+│   │   ├── MetricsCollector.js        # Metrics collection
+│   │   ├── fetcherService.js          # Legacy fetcher
+│   │   └── cacheService.js            # LRU cache
 │   ├── utils/             # Utilities
 │   │   └── ssrf.js        # SSRF protection
 │   ├── server.js          # Express application
-│   └── index.js           # Entry point
+│   └── main.js            # Entry point
 ├── bin/
 │   └── html-fetch.js      # CLI tool
 ├── tests/                 # Test suite
