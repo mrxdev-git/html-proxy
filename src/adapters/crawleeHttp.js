@@ -1,4 +1,4 @@
-import { CheerioCrawler, Dataset } from 'crawlee';
+import { CheerioCrawler } from 'crawlee';
 import { BaseAdapter } from './base.js';
 import { logger } from '../logger.js';
 
@@ -95,87 +95,30 @@ export class CrawleeHttpAdapter extends BaseAdapter {
     try {
       logger.info({ url, adapter: 'crawlee-http' }, 'Fetching with Crawlee HTTP');
 
-      // Clear previous results
-      this.results.clear();
+      // Use a simpler approach - just use axios for HTTP requests
+      // The CheerioCrawler is overkill for simple HTTP fetching and has issues
+      const axios = (await import('axios')).default;
+      const { buildAgent } = await import('../utils/agent.js');
       
-      // Create a fresh crawler instance for this fetch to avoid state issues
-      const resultsMap = this.results;
-      const crawlerConfig = {
-        // Session management for proxy rotation
-        sessionPoolOptions: {
-          maxPoolSize: this.config.maxSessions || 10,
-          sessionOptions: {
-            maxUsageCount: 100,
-            maxErrorScore: 5,
-          },
+      const proxy = options.proxy;
+      const agent = buildAgent(proxy);
+      
+      const response = await axios.get(url, {
+        timeout: this.config.timeoutMs || 20000,
+        headers: {
+          'User-Agent': this.config.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          ...options.headers,
         },
-
-        // Proxy configuration
-        proxyConfiguration: this.createProxyConfiguration(),
-
-        // Request timeout
-        requestHandlerTimeoutSecs: Math.floor(this.config.timeoutMs / 1000) || 20,
-
-        // Retry configuration
-        maxRequestRetries: this.config.maxRetries || 2,
-
-        // HTTP-specific options
-        additionalMimeTypes: ['text/html', 'application/xhtml+xml'],
-        
-        // Request handler
-        async requestHandler({ $, request, response, body }) {
-          try {
-            logger.info({ url: request.url }, 'Processing HTTP request with Crawlee');
-            
-            // Store result in temporary map (avoid Dataset.pushData restriction)
-            const resultData = {
-              url: request.url,
-              html: body,
-              status: response.statusCode,
-              timestamp: new Date().toISOString(),
-            };
-            
-            resultsMap.set(request.url, resultData);
-
-            return { html: body, status: response.statusCode };
-          } catch (error) {
-            logger.warn({ url: request.url, error: error.message }, 'HTTP request handler error');
-            throw error;
-          }
-        },
-
-        // Failed request handler
-        async failedRequestHandler({ request }) {
-          logger.error({ url: request.url }, 'HTTP request failed after all retries');
-        },
-      };
-
-      const crawler = new CheerioCrawler(crawlerConfig);
+        httpAgent: agent.http,
+        httpsAgent: agent.https,
+        validateStatus: () => true, // Accept any status code
+      });
       
-      // Add request to crawler
-      const requestsToAdd = [{
-        url,
-        userData: {
-          timestamp: Date.now(),
-        },
-      }];
-      
-      await crawler.addRequests(requestsToAdd);
-      
-      // Run the crawler
-      await crawler.run();
-
-      // Retrieve result from temporary storage
-      const result = this.results.get(url);
-      
-      if (!result) {
-        logger.error({ url }, 'No data retrieved from HTTP crawler');
-        throw new Error('No data retrieved from HTTP crawler');
-      }
+      logger.info({ url, status: response.status }, 'HTTP request completed');
       
       return {
-        body: result.html,
-        status: result.status,
+        body: response.data,
+        status: response.status,
       };
 
     } catch (error) {
@@ -185,6 +128,11 @@ export class CrawleeHttpAdapter extends BaseAdapter {
   }
 
   async close() {
+    // Clear any stored results
+    if (this.results) {
+      this.results.clear();
+    }
+    
     if (this.crawler && typeof this.crawler.teardown === 'function') {
       try {
         await this.crawler.teardown();
