@@ -1,6 +1,6 @@
-const ITransportAdapter = require('./interfaces/ITransportAdapter');
-const { chromium } = require('playwright');
-const logger = require('../logger');
+import ITransportAdapter from './interfaces/ITransportAdapter.js';
+import { chromium } from 'playwright';
+import { logger } from '../logger.js';
 
 /**
  * Enhanced Browser Adapter implementing ITransportAdapter interface
@@ -361,4 +361,4 @@ class EnhancedBrowserAdapter extends ITransportAdapter {
     }
 }
 
-module.exports = EnhancedBrowserAdapter;
+export default EnhancedBrowserAdapter;

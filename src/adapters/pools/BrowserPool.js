@@ -1,6 +1,6 @@
-const { ResourcePool } = require('../managers/ResourceManager');
-const { chromium, firefox, webkit } = require('playwright');
-const crypto = require('crypto');
+import { ResourcePool } from '../managers/ResourceManager.js';
+import { chromium, firefox, webkit } from 'playwright';
+import crypto from 'crypto';
 
 /**
  * High-performance BrowserPool with pre-warming and fingerprint management
@@ -368,4 +368,4 @@ class BrowserPool extends ResourcePool {
     }
 }
 
-module.exports = BrowserPool;
+export default BrowserPool;

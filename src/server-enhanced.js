@@ -1,9 +1,9 @@
-const express = require('express');
-const cors = require('cors');
-const { getArchitectureIntegration } = require('./services/ArchitectureIntegration');
-const fetcherService = require('./services/fetcherService');
-const logger = require('./logger');
-const crypto = require('crypto');
+import express from 'express';
+import cors from 'cors';
+import { getArchitectureIntegration } from './services/ArchitectureIntegration.js';
+import { FetcherService } from './services/fetcherService.js';
+import { logger } from './logger.js';
+import crypto from 'crypto';
 
 /**
  * Enhanced Server with New Architecture Integration
@@ -14,7 +14,7 @@ class EnhancedServer {
         this.app = express();
         this.config = config;
         this.architecture = null;
-        this.legacyFetcher = fetcherService;
+        this.legacyFetcher = new FetcherService(config);
     }
 
     /**
@@ -374,10 +374,10 @@ class EnhancedServer {
 }
 
 // Export for use
-module.exports = EnhancedServer;
+export default EnhancedServer;
 
 // Run if executed directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const server = new EnhancedServer();
     
     server.initialize()

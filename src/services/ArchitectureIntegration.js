@@ -1,13 +1,13 @@
-const ResourceManager = require('../adapters/managers/ResourceManager');
-const AdapterRouter = require('../adapters/managers/AdapterRouter');
-const MetricsCollector = require('../adapters/managers/MetricsCollector');
-const BrowserPool = require('../adapters/pools/BrowserPool');
-const HttpConnectionPool = require('../adapters/pools/HttpConnectionPool');
-const EnhancedFetcherService = require('./EnhancedFetcherService');
-const EnhancedHttpAdapter = require('../adapters/EnhancedHttpAdapter');
-const EnhancedBrowserAdapter = require('../adapters/EnhancedBrowserAdapter');
-const migrationConfig = require('../config/migration');
-const logger = require('../logger');
+import ResourceManager from '../adapters/managers/ResourceManager.js';
+import AdapterRouter from '../adapters/managers/AdapterRouter.js';
+import MetricsCollector from '../adapters/managers/MetricsCollector.js';
+import BrowserPool from '../adapters/pools/BrowserPool.js';
+import HttpConnectionPool from '../adapters/pools/HttpConnectionPool.js';
+import EnhancedFetcherService from './EnhancedFetcherService.js';
+import EnhancedHttpAdapter from '../adapters/EnhancedHttpAdapter.js';
+import EnhancedBrowserAdapter from '../adapters/EnhancedBrowserAdapter.js';
+import migrationConfig from '../config/migration.js';
+import { logger } from '../logger.js';
 
 /**
  * Architecture Integration Service
@@ -265,7 +265,8 @@ class ArchitectureIntegration {
         // Get cache service if available
         let cacheService = null;
         try {
-            cacheService = require('./cacheService');
+            const cacheModule = await import('./cacheService.js');
+            cacheService = cacheModule.default;
         } catch (error) {
             logger.debug('Cache service not available');
         }
@@ -442,7 +443,7 @@ function getArchitectureIntegration(config) {
     return instance;
 }
 
-module.exports = {
+export {
     ArchitectureIntegration,
     getArchitectureIntegration
 };

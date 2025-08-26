@@ -1,4 +1,4 @@
-const EventEmitter = require('events');
+import { EventEmitter } from 'events';
 
 /**
  * Base ResourcePool class for managing pooled resources
@@ -306,4 +306,5 @@ class ResourceManager extends EventEmitter {
     }
 }
 
-module.exports = { ResourceManager, ResourcePool };
+export { ResourcePool, ResourceManager };
+export default ResourceManager;

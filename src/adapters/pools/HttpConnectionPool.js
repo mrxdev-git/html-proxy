@@ -1,8 +1,8 @@
-const { ResourcePool } = require('../managers/ResourceManager');
-const axios = require('axios');
-const { HttpProxyAgent } = require('http-proxy-agent');
-const { HttpsProxyAgent } = require('https-proxy-agent');
-const crypto = require('crypto');
+import { ResourcePool } from '../managers/ResourceManager.js';
+import axios from 'axios';
+import { HttpProxyAgent } from 'http-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import crypto from 'crypto';
 
 /**
  * HTTP Connection Pool for managing axios instances with proxy rotation
@@ -357,4 +357,4 @@ class HttpConnectionPool extends ResourcePool {
     }
 }
 
-module.exports = HttpConnectionPool;
+export default HttpConnectionPool;

@@ -113,4 +113,4 @@ class ITransportAdapter {
     }
 }
 
-module.exports = ITransportAdapter;
+export default ITransportAdapter;

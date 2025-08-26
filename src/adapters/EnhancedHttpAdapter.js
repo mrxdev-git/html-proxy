@@ -1,7 +1,7 @@
-const ITransportAdapter = require('./interfaces/ITransportAdapter');
-const axios = require('axios');
-const { HttpsProxyAgent } = require('https-proxy-agent');
-const { HttpProxyAgent } = require('http-proxy-agent');
+import ITransportAdapter from './interfaces/ITransportAdapter.js';
+import axios from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { HttpProxyAgent } from 'http-proxy-agent';
 
 /**
  * Enhanced HTTP Adapter implementing ITransportAdapter interface
@@ -293,4 +293,4 @@ class EnhancedHttpAdapter extends ITransportAdapter {
     }
 }
 
-module.exports = EnhancedHttpAdapter;
+export default EnhancedHttpAdapter;

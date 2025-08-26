@@ -1,6 +1,6 @@
-const EventEmitter = require('events');
-const crypto = require('crypto');
-const logger = require('../logger');
+import { EventEmitter } from 'events';
+import crypto from 'crypto';
+import { logger } from '../logger.js';
 
 /**
  * Enhanced Fetcher Service with Dependency Injection
@@ -480,4 +480,4 @@ class EnhancedFetcherService extends EventEmitter {
     }
 }
 
-module.exports = EnhancedFetcherService;
+export default EnhancedFetcherService;

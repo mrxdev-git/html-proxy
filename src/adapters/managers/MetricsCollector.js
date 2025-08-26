@@ -1,6 +1,6 @@
-const EventEmitter = require('events');
-const fs = require('fs').promises;
-const path = require('path');
+import { EventEmitter } from 'events';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 /**
  * Performance Metrics Collector for monitoring and analysis
@@ -481,4 +481,4 @@ class MetricsCollector extends EventEmitter {
     }
 }
 
-module.exports = MetricsCollector;
+export default MetricsCollector;

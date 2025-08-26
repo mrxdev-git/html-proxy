@@ -1,4 +1,4 @@
-const EventEmitter = require('events');
+import { EventEmitter } from 'events';
 
 /**
  * Circuit Breaker implementation for fault tolerance
@@ -575,4 +575,4 @@ class AdapterRouter extends EventEmitter {
     }
 }
 
-module.exports = AdapterRouter;
+export default AdapterRouter;

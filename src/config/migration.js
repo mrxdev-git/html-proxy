@@ -179,4 +179,4 @@ migrationConfig.helpers.shouldUseEnhanced = migrationConfig.helpers.shouldUseEnh
 migrationConfig.helpers.getActiveFeatures = migrationConfig.helpers.getActiveFeatures.bind(migrationConfig);
 migrationConfig.helpers.validate = migrationConfig.helpers.validate.bind(migrationConfig);
 
-module.exports = migrationConfig;
+export default migrationConfig;
