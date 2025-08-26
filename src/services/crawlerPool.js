@@ -1,6 +1,5 @@
 import { PlaywrightCrawler } from '@crawlee/playwright';
 import { EventEmitter } from 'events';
-import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../logger.js';
 import { createPageLoader } from '../utils/pageLoader.js';
 import { platformConfig } from '../utils/platformConfig.js';
@@ -21,9 +20,7 @@ export class CrawlerPool extends EventEmitter {
     this.crawlers = new Map(); // Pool of active crawlers
     this.browserContexts = new Map(); // Reusable browser contexts
     this.requestQueue = []; // Pending requests
-    this.pendingRequests = new Map();
-    this.batchQueue = [];
-    this.batchTimer = null;
+      this.batchTimer = null;
     this.isDestroyed = false; // Pending requests
     this.processing = new Map(); // Currently processing requests
     this.stats = {
@@ -440,26 +437,7 @@ export class CrawlerPool extends EventEmitter {
       }
     }
   }
-
-  getAvailableCrawler() {
-    // Find idle crawler
-    for (const [id, crawler] of this.crawlers) {
-      if (crawler.status === 'IDLE') {
-        return crawler;
-      }
-    }
-    
-    // Create new crawler if under max size
-    if (this.crawlers.size < this.poolConfig.maxSize) {
-      const newId = `crawler-${this.crawlers.size}`;
-      this.createCrawler(newId);
-      return this.crawlers.get(newId);
-    }
-    
-    return null;
-  }
-
-  createProxyConfiguration() {
+    createProxyConfiguration() {
     if (!this.config.proxies || this.config.proxies.length === 0) {
       return undefined;
     }
@@ -567,14 +545,7 @@ export class CrawlerPool extends EventEmitter {
   }
   
   // Stop monitoring
-  stopMonitoring() {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-    }
-  }
-  
-  // Enhanced cleanup methods
+// Enhanced cleanup methods
   async cleanupOldBrowserContexts() {
     const now = Date.now();
     const maxAge = 5 * 60 * 1000; // 5 minutes
