@@ -33,10 +33,10 @@ export function hostnameMatchesBlocklist(hostname, patterns) {
   });
 }
 
-export async function validateUrlSafety(rawUrl, { allowPrivateNetworks = false, blocklistHosts = [] } = {}) {
+export async function validateUrlSafety(urlString, { allowPrivateNetworks = false, blocklistHosts = [] } = {}) {
   let url;
   try {
-    url = new URL(rawUrl);
+    url = new URL(urlString);
   } catch (e) {
     throw new Error('Invalid URL');
   }

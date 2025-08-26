@@ -1,10 +1,19 @@
 // Tests FetcherService in HTTP mode with proxy pool present but unused
 import { jest, describe, test, expect, beforeEach, afterAll, beforeAll, afterEach } from '@jest/globals';
 
+// Mock dns/promises module before any imports that use it
 jest.unstable_mockModule('dns/promises', () => ({
-  // Provide both default export with lookup method and named export for assertions
-  default: { lookup: jest.fn(async () => [{ address: '93.184.216.34', family: 4 }]) },
-  lookup: jest.fn(async () => [{ address: '93.184.216.34', family: 4 }]), // example.org
+  default: {
+    lookup: jest.fn(async (host, options) => {
+      // Return a public IP for all test domains
+      // When options.all is true, return an array of address objects
+      if (options && options.all) {
+        return [{ address: '93.184.216.34', family: 4 }];
+      }
+      // For single lookup (without 'all' option)
+      return { address: '93.184.216.34', family: 4 };
+    })
+  }
 }));
 
 import nock from 'nock';
@@ -18,10 +27,16 @@ describe('FetcherService HTTP', () => {
   beforeAll(() => {
     nock.disableNetConnect();
   });
+  
   afterAll(() => {
+    // Properly restore nock to prevent Jest warnings
+    nock.cleanAll();
+    nock.restore();
     nock.enableNetConnect();
   });
+  
   afterEach(() => {
+    // Clean all interceptors after each test
     nock.cleanAll();
   });
 
@@ -30,14 +45,8 @@ describe('FetcherService HTTP', () => {
     let config;
 
     beforeAll(() => {
-      // Mock DNS module to prevent actual DNS lookups
-      const mockDns = {
-        lookup: jest.fn(async (host, options) => {
-          // Return a public IP for all test domains
-          return [{ address: '93.184.216.34', family: 4 }];
-        })
-      };
-      setDnsModule(mockDns);
+      // DNS module is already mocked at the top of the file
+      // No need to set it again
     });
 
     beforeEach(() => {
@@ -78,6 +87,9 @@ describe('FetcherService HTTP', () => {
       
       // Clean up singleton cache service
       destroyCacheService();
+      
+      // Ensure nock is fully cleaned up
+      nock.cleanAll();
     });
 
     test('fetches page via HTTP adapter and returns HTML', async () => {
@@ -89,13 +101,13 @@ describe('FetcherService HTTP', () => {
     });
 
     test('retries on failure', async () => {
-      // Use a unique URL to avoid cache conflicts
-      const retryUrl = 'http://retry-test.example.org';
+      // Use example.org with a path to avoid cache conflicts
+      const retryUrl = 'http://example.org/retry-test';
       
       // Set up interceptor that fails once then succeeds
       let callCount = 0;
-      nock('http://retry-test.example.org')
-        .get('/')
+      nock('http://example.org')
+        .get('/retry-test')
         .times(2) // Allow up to 2 calls
         .reply(() => {
           callCount++;
