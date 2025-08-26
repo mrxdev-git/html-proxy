@@ -6,6 +6,8 @@ import HttpConnectionPool from '../adapters/pools/HttpConnectionPool.js';
 import EnhancedFetcherService from './EnhancedFetcherService.js';
 import EnhancedHttpAdapter from '../adapters/EnhancedHttpAdapter.js';
 import EnhancedBrowserAdapter from '../adapters/EnhancedBrowserAdapter.js';
+import { EnhancedCrawleeHttpAdapter } from '../adapters/EnhancedCrawleeHttpAdapter.js';
+import { EnhancedCrawleeBrowserAdapter } from '../adapters/EnhancedCrawleeBrowserAdapter.js';
 import migrationConfig from '../config/migration.js';
 import { logger } from '../logger.js';
 
@@ -215,7 +217,42 @@ class ArchitectureIntegration {
             logger.info('Registered browser adapter');
         }
         
-        // Note: Add Crawlee adapters here when migrated
+        // Register Crawlee HTTP adapter
+        if (this.config.adapters.crawleeHttp?.enabled !== false) {
+            const crawleeHttpAdapter = new EnhancedCrawleeHttpAdapter({
+                timeout: this.config.adapters.crawleeHttp?.timeout || 20000,
+                maxRetries: this.config.adapters.crawleeHttp?.maxRetries || 2,
+                userAgent: this.config.adapters.crawleeHttp?.userAgent,
+                proxies: this.config.adapters.crawleeHttp?.proxies || []
+            });
+            
+            this.adapters.set('crawlee-http', crawleeHttpAdapter);
+            
+            this.adapterRouter.registerAdapter('crawlee-http', crawleeHttpAdapter, {
+                priority: 80, // Higher priority than standard HTTP
+                capabilities: crawleeHttpAdapter.getCapabilities()
+            });
+            
+            logger.info('Registered Crawlee HTTP adapter');
+        }
+        
+        // Register Crawlee Browser adapter
+        if (this.config.adapters.crawleeBrowser?.enabled !== false) {
+            const crawleeBrowserAdapter = new EnhancedCrawleeBrowserAdapter({
+                timeout: this.config.adapters.crawleeBrowser?.timeout || 30000,
+                headless: this.config.adapters.crawleeBrowser?.headless !== false,
+                maxCrawlers: this.config.adapters.crawleeBrowser?.maxCrawlers || 5
+            });
+            
+            this.adapters.set('crawlee-browser', crawleeBrowserAdapter);
+            
+            this.adapterRouter.registerAdapter('crawlee-browser', crawleeBrowserAdapter, {
+                priority: 60, // Higher priority than standard browser
+                capabilities: crawleeBrowserAdapter.getCapabilities()
+            });
+            
+            logger.info('Registered Crawlee Browser adapter');
+        }
     }
 
     /**
