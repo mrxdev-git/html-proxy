@@ -1,7 +1,9 @@
-import { PlaywrightCrawler, CheerioCrawler, Configuration } from 'crawlee';
+import { PlaywrightCrawler } from '@crawlee/playwright';
+import { EventEmitter } from 'events';
+import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../logger.js';
-import EventEmitter from 'events';
 import { createPageLoader } from '../utils/pageLoader.js';
+import { platformConfig } from '../utils/platformConfig.js';
 
 /**
  * CrawlerPool - Manages a pool of crawler instances for maximum performance
@@ -147,7 +149,7 @@ export class CrawlerPool extends EventEmitter {
         logger.debug({ crawlerId, requestId, url: request.url }, 'Processing request');
         
         // Apply stealth measures
-        await this.applyStealth(page);
+        await applyStealth(page);
         
         // Create page loader with pool configuration
         const pageLoader = createPageLoader(this.poolConfig.loadingStrategy);
@@ -226,13 +228,33 @@ export class CrawlerPool extends EventEmitter {
   }
 
   createFailedRequestHandler(crawlerId) {
-    return async ({ request }) => {
-      const requestId = request.userData.requestId;
-      logger.error({ crawlerId, requestId, url: request.url }, 'Request failed after retries');
+    return async ({ request, error }) => {
+      const requestId = request.userData?.requestId || 'unknown';
       
-      this.emit(`failed:${requestId}`, new Error('Request failed after all retries'));
-      this.updateStats(false);
-      this.recordFailure();
+      // Check if it's an HTTP/2 error and suggest retry with HTTP/1.1
+      const isHttp2Error = error?.message?.includes('ERR_HTTP2_PROTOCOL_ERROR');
+      
+      logger.error({ 
+        crawlerId, 
+        requestId, 
+        url: request.url,
+        error: error?.message,
+        isHttp2Error,
+      }, 'Request failed after retries');
+      
+      // If HTTP/2 error, emit with special flag
+      if (isHttp2Error) {
+        this.emit(`failed:${requestId}`, {
+          error: new Error('HTTP/2 protocol error - site may not support HTTP/2'),
+          isHttp2Error: true,
+          suggestion: 'Retry with HTTP/1.1 or use alternative fetch method',
+        });
+      } else {
+        this.emit(`failed:${requestId}`, new Error(error?.message || 'Request failed after all retries'));
+      }
+      
+      // Update stats
+      this.stats.failedRequests++;
     };
   }
 
@@ -357,16 +379,12 @@ export class CrawlerPool extends EventEmitter {
     logger.info({ crawlerId, requestId: request.requestId, url: request.url }, 'processQueue: Starting to process request');
     
     try {
-      // Create a fresh crawler instance for this request
+      // Get platform-specific crawler configuration
+      const platformCrawlerConfig = platformConfig.getCrawlerConfig();
+      
+      // Create a fresh crawler instance for this request with platform-specific config
       const crawlerConfig = {
-        maxRequestRetries: 2,
-        requestHandlerTimeoutSecs: 30,
-        
-        // Browser pool configuration
-        browserPoolOptions: {
-          useFingerprints: true,
-          maxOpenPagesPerBrowser: 1,
-        },
+        ...platformCrawlerConfig,
         
         // Proxy configuration if available
         proxyConfiguration: this.createProxyConfiguration(),
@@ -382,15 +400,20 @@ export class CrawlerPool extends EventEmitter {
       const crawler = new PlaywrightCrawler(crawlerConfig);
       logger.debug({ crawlerId }, 'processQueue: Created PlaywrightCrawler instance');
       
-      // Add request directly to the crawler
-      await crawler.addRequests([{
+      // Add request directly to the crawler with retry strategy
+      const requestToAdd = {
         url: request.url,
         userData: {
           requestId: request.requestId,
           ...request.options,
         },
-      }]);
-      logger.debug({ crawlerId, requestId: request.requestId }, 'processQueue: Added request to crawler');
+        maxRetries: 3,  // Increase retries for HTTP/2 errors
+        retryOnBlocked: true,
+        uniqueKey: `${request.url}-${request.requestId}`,  // Ensure unique key
+      };
+      
+      await crawler.addRequests([requestToAdd]);
+      logger.debug({ crawlerId, requestId: request.requestId, request: requestToAdd }, 'processQueue: Added request to crawler');
       
       // Run the crawler (this will process the request)
       logger.info({ crawlerId, requestId: request.requestId }, 'processQueue: About to call crawler.run()');
@@ -500,11 +523,11 @@ export class CrawlerPool extends EventEmitter {
       
       // Check memory pressure
       const memoryUsage = process.memoryUsage();
-      const memoryPressure = memoryUsage.heapUsed / memoryUsage.heapTotal;
+      const memoryPressureComputed = memoryUsage.heapUsed / memoryUsage.heapTotal;
       
       // Only trigger emergency cleanup if memory pressure is very high AND we have crawlers to clean
-      if (memoryPressure > 0.95 && this.crawlers.size > 1) {
-        logger.warn({ memoryPressure, memoryUsage }, 'Critical memory pressure detected, performing emergency cleanup');
+      if (memoryPressureComputed > 0.95 && this.crawlers.size > 1) {
+        logger.warn({ memoryPressureComputed, memoryUsage }, 'Critical memory pressure detected, performing emergency cleanup');
         await this.performEmergencyCleanup();
       }
       
@@ -522,22 +545,20 @@ export class CrawlerPool extends EventEmitter {
       // Clean up old browser contexts
       await this.cleanupOldBrowserContexts();
       
-      // Force garbage collection under memory pressure
-      if (memoryPressure > 0.90 && global.gc) {
-        global.gc();
-      }
+      // Check memory pressure
+      const memoryPressure = await this.checkMemoryPressure();
       
       // Log stats with memory info (less verbose)
-      if (memoryPressure > 0.90) {
+      if (memoryPressure > 90) {
         logger.warn({ 
           stats: this.stats, 
-          memoryPressure: Math.round(memoryPressure * 100),
+          memoryPressure: Math.round(memoryPressure),
           browserContexts: this.browserContexts.size 
         }, 'Crawler pool stats - high memory pressure');
       } else {
         logger.debug({ 
           stats: this.stats, 
-          memoryPressure: Math.round(memoryPressure * 100),
+          memoryPressure: Math.round(memoryPressure),
           browserContexts: this.browserContexts.size 
         }, 'Crawler pool stats');
       }
@@ -572,48 +593,66 @@ export class CrawlerPool extends EventEmitter {
     }
   }
   
-  async performEmergencyCleanup() {
-    logger.warn('Performing emergency memory cleanup');
+  async checkMemoryPressure() {
+    const memUsage = process.memoryUsage();
+    const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
     
-    // Close all idle crawlers immediately
-    const idleCrawlers = Array.from(this.crawlers.entries())
-      .filter(([_, crawler]) => crawler.status === 'IDLE');
-    
-    for (const [id, _] of idleCrawlers) {
-      await this.removeCrawler(id);
-    }
-    
-    // Clear all browser contexts
-    for (const [pageId, context] of this.browserContexts) {
-      try {
-        if (context.controller && typeof context.controller.close === 'function') {
-          await context.controller.close();
+    if (heapUsedPercent > 85) {
+      logger.warn({
+        stats: this.stats,
+        memoryPressure: Math.round(heapUsedPercent),
+        browserContexts: this.browserPool?.pages?.size || 0,
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+      }, 'Crawler pool stats - high memory pressure');
+      
+      // Emergency cleanup if memory pressure is critical
+      if (heapUsedPercent > 90) {
+        logger.error({ heapUsedPercent }, 'Critical memory pressure - initiating emergency cleanup');
+        await this.emergencyCleanup();
+        
+        // Force garbage collection if available
+        if (global.gc) {
+          global.gc();
+          logger.info('Forced garbage collection');
         }
-      } catch (error) {
-        logger.warn({ pageId }, 'Error during emergency context cleanup');
       }
     }
-    this.browserContexts.clear();
+    
+    return heapUsedPercent;
+  }
+
+  async emergencyCleanup() {
+    logger.warn('Performing emergency cleanup due to memory pressure');
+    
+    // Clear all idle crawlers
+    for (const crawler of this.crawlers.values()) {
+      if (crawler.status === 'idle') {
+        await this.removeCrawler(crawler.id);
+      }
+    }
     
     // Clear request queue if too large
     if (this.requestQueue.length > 50) {
-      this.requestQueue = this.requestQueue.slice(0, 10);
-      logger.warn('Cleared request queue due to memory pressure');
+      const removed = this.requestQueue.splice(50);
+      logger.warn({ removedCount: removed.length }, 'Removed excess requests from queue');
     }
     
-    // Force garbage collection
+    // Clean up browser pool if it exists
+    if (this.browserPool) {
+      try {
+        await this.browserPool.destroy();
+        this.browserPool = null;
+        logger.info('Destroyed browser pool to free memory');
+      } catch (error) {
+        logger.error({ error }, 'Error destroying browser pool during emergency cleanup');
+      }
+    }
+    
+    // Force garbage collection if available
     if (global.gc) {
       global.gc();
-    }
-    
-    // Recreate minimum crawlers after cleanup
-    if (this.crawlers.size === 0 && !this.isDestroyed) {
-      logger.info('Recreating minimum crawlers after emergency cleanup');
-      try {
-        await this.createCrawler('emergency-crawler-0');
-      } catch (error) {
-        logger.error({ error: error.message }, 'Failed to recreate crawler after emergency cleanup');
-      }
+      logger.info('Forced garbage collection during emergency cleanup');
     }
   }
 
