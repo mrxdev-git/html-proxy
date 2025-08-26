@@ -221,6 +221,7 @@ downloads/
 # Environment files (keep .env.example)
 .env.local
 .env.*.local
+.env
 
 # Docker volumes
 docker-volumes/
