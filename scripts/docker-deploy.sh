@@ -67,6 +67,7 @@ start_dev() {
     docker-compose -f docker-compose.dev.yml up -d
     log_success "Development environment started"
     log_info "Application available at: http://localhost:${PORT:-8080}"
+    log_info "Monitoring dashboard available at: http://localhost:${MONITORING_PORT:-9090}"
     log_info "View logs with: ./scripts/docker-deploy.sh logs dev"
 }
 
@@ -84,6 +85,7 @@ start_prod() {
     docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
     log_success "Production environment started"
     log_info "Application available at: http://localhost:${PORT:-8080}"
+    log_info "Monitoring dashboard available at: http://localhost:${MONITORING_PORT:-9090}"
     log_info "View logs with: ./scripts/docker-deploy.sh logs prod"
 }
 
@@ -155,6 +157,33 @@ health_check() {
     fi
 }
 
+# Check monitoring endpoints (enhanced architecture)
+check_monitoring() {
+    local monitoring_port=${MONITORING_PORT:-9090}
+    log_info "Checking enhanced architecture monitoring endpoints..."
+    
+    # Check metrics endpoint
+    if curl -f -s "http://localhost:$monitoring_port/metrics" > /dev/null; then
+        log_success "Metrics endpoint available"
+    else
+        log_warning "Metrics endpoint not available (may be in legacy mode)"
+    fi
+    
+    # Check adapter stats
+    if curl -f -s "http://localhost:$monitoring_port/stats/adapters" > /dev/null; then
+        log_success "Adapter stats available"
+        echo "Adapter Statistics:"
+        curl -s "http://localhost:$monitoring_port/stats/adapters" | jq '.' 2>/dev/null || curl -s "http://localhost:$monitoring_port/stats/adapters"
+    fi
+    
+    # Check pool stats
+    if curl -f -s "http://localhost:$monitoring_port/stats/pools" > /dev/null; then
+        log_success "Resource pool stats available"
+        echo "Pool Statistics:"
+        curl -s "http://localhost:$monitoring_port/stats/pools" | jq '.' 2>/dev/null || curl -s "http://localhost:$monitoring_port/stats/pools"
+    fi
+}
+
 # Show help
 show_help() {
     echo "Docker Deployment Script for Node HTML Receiver"
@@ -169,6 +198,7 @@ show_help() {
     echo "  logs [env] [-f] Show logs (env: dev|prod, default: prod, -f to follow)"
     echo "  status          Show container and image status"
     echo "  health          Perform health check"
+    echo "  monitor         Check monitoring endpoints (enhanced mode)"
     echo "  clean           Clean up Docker resources"
     echo "  help            Show this help message"
     echo
@@ -209,6 +239,9 @@ main() {
             ;;
         "health")
             health_check
+            ;;
+        "monitor")
+            check_monitoring
             ;;
         "clean")
             clean_docker

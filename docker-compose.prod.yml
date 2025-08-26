@@ -28,6 +28,24 @@ services:
           memory: 256M
     environment:
       - NODE_ENV=production
+      # Architecture Mode - Enhanced for production
+      - ARCHITECTURE_MODE=enhanced
+      # Enhanced Architecture Configuration
+      - ENABLE_RESOURCE_POOLING=true
+      - HTTP_POOL_MIN_SIZE=4
+      - HTTP_POOL_MAX_SIZE=20
+      - BROWSER_POOL_MIN_SIZE=2
+      - BROWSER_POOL_MAX_SIZE=10
+      - ENABLE_INTELLIGENT_ROUTING=true
+      - ROUTING_STRATEGY=ml
+      - CIRCUIT_BREAKER_ENABLED=true
+      - CIRCUIT_BREAKER_THRESHOLD=5
+      - CIRCUIT_BREAKER_TIMEOUT_MS=60000
+      - ENABLE_MONITORING=true
+      - MONITORING_PORT=9090
+      - METRICS_ENABLED=true
+      - METRICS_FLUSH_INTERVAL_MS=30000
+      # Logging
       - VERBOSE=false
       - LOG_LEVEL=error
     logging:

@@ -113,9 +113,21 @@ else
   echo "PORT=${PORT}" >> .env
 fi
 
-# Ensure cache directory exists
-mkdir -p "${APP_DIR}/cache"
-chmod 755 "${APP_DIR}/cache"
+# Configure enhanced architecture mode
+if ! grep -q '^ARCHITECTURE_MODE=' .env; then
+  info "Setting ARCHITECTURE_MODE=enhanced in .env"
+  echo "ARCHITECTURE_MODE=enhanced" >> .env
+fi
+
+# Configure monitoring port
+if ! grep -q '^MONITORING_PORT=' .env; then
+  info "Setting MONITORING_PORT=9090 in .env"
+  echo "MONITORING_PORT=9090" >> .env
+fi
+
+# Ensure cache and storage directories exist
+mkdir -p "${APP_DIR}/cache" "${APP_DIR}/storage"
+chmod 755 "${APP_DIR}/cache" "${APP_DIR}/storage"
 
 # 6) Create systemd user service
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
@@ -133,6 +145,7 @@ Type=simple
 WorkingDirectory=${APP_DIR}
 Environment="NODE_ENV=production"
 Environment="NODE_OPTIONS=--max-old-space-size=2048"
+Environment="ARCHITECTURE_MODE=enhanced"
 # App reads .env from WorkingDirectory
 ExecStart=/usr/bin/node src/server.js
 Restart=on-failure
@@ -181,10 +194,13 @@ else
 fi
 
 info "Service endpoints:"
-echo "  Health check: curl -sS http://127.0.0.1:${PORT}/healthz"
-echo "  Fetch HTML:   curl -X POST http://127.0.0.1:${PORT}/fetch -H 'Content-Type: application/json' -d '{\"url\":\"https://example.com\"}'"
-echo "  Cache stats:  curl -sS http://127.0.0.1:${PORT}/cache/stats"
-echo "  Metrics:      curl -sS http://127.0.0.1:${PORT}/metrics"
+echo "  Health check:    curl -sS http://127.0.0.1:${PORT}/healthz"
+echo "  Fetch HTML:      curl -X POST http://127.0.0.1:${PORT}/fetch -H 'Content-Type: application/json' -d '{\"url\":\"https://example.com\"}'"
+echo "  Cache stats:     curl -sS http://127.0.0.1:${PORT}/cache/stats"
+echo "  Metrics:         curl -sS http://127.0.0.1:9090/metrics"
+echo "  Adapter stats:   curl -sS http://127.0.0.1:9090/stats/adapters"
+echo "  Pool stats:      curl -sS http://127.0.0.1:9090/stats/pools"
+echo "  Active requests: curl -sS http://127.0.0.1:9090/requests/active"
 
 echo
 success "Setup complete! Node HTML Receiver is running locally on port ${PORT}."

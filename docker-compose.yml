@@ -7,9 +7,13 @@ services:
       target: production
     ports:
       - "${PORT:-8080}:8080"
+      - "${MONITORING_PORT:-9090}:9090"  # Monitoring endpoints
     environment:
       - NODE_ENV=production
       - PORT=8080
+      # Architecture Mode
+      - ARCHITECTURE_MODE=${ARCHITECTURE_MODE:-enhanced}
+      # Legacy Configuration
       - DEFAULT_MODE=${DEFAULT_MODE:-crawlee-browser}
       - TIMEOUT_MS=${TIMEOUT_MS:-20000}
       - MAX_RETRIES=${MAX_RETRIES:-2}
@@ -31,6 +35,22 @@ services:
       - FINGERPRINT_OS=${FINGERPRINT_OS:-linux,windows,macos}
       - MAX_CRAWLERS=${MAX_CRAWLERS:-5}
       - CRAWLER_IDLE_TIMEOUT_MS=${CRAWLER_IDLE_TIMEOUT_MS:-300000}
+      # Enhanced Architecture Configuration
+      - ENABLE_RESOURCE_POOLING=${ENABLE_RESOURCE_POOLING:-true}
+      - HTTP_POOL_MIN_SIZE=${HTTP_POOL_MIN_SIZE:-2}
+      - HTTP_POOL_MAX_SIZE=${HTTP_POOL_MAX_SIZE:-10}
+      - BROWSER_POOL_MIN_SIZE=${BROWSER_POOL_MIN_SIZE:-1}
+      - BROWSER_POOL_MAX_SIZE=${BROWSER_POOL_MAX_SIZE:-5}
+      - ENABLE_INTELLIGENT_ROUTING=${ENABLE_INTELLIGENT_ROUTING:-true}
+      - ROUTING_STRATEGY=${ROUTING_STRATEGY:-ml}
+      - CIRCUIT_BREAKER_ENABLED=${CIRCUIT_BREAKER_ENABLED:-true}
+      - CIRCUIT_BREAKER_THRESHOLD=${CIRCUIT_BREAKER_THRESHOLD:-5}
+      - CIRCUIT_BREAKER_TIMEOUT_MS=${CIRCUIT_BREAKER_TIMEOUT_MS:-60000}
+      - ENABLE_MONITORING=${ENABLE_MONITORING:-true}
+      - MONITORING_PORT=${MONITORING_PORT:-9090}
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - METRICS_FLUSH_INTERVAL_MS=${METRICS_FLUSH_INTERVAL_MS:-30000}
+      # Logging
       - VERBOSE=${VERBOSE:-false}
       - LOG_LEVEL=${LOG_LEVEL:-}
     volumes:
