@@ -324,7 +324,7 @@ export class PageLoader {
   async captureFinalContent(page) {
     try {
       // Wait a bit for any final renders
-      await page.waitForTimeout(500);
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Get full HTML content
       const htmlContent = await page.content();

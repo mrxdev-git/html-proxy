@@ -1,6 +1,7 @@
-import { AdaptivePlaywrightCrawler, Dataset } from 'crawlee';
+import { AdaptivePlaywrightCrawler } from '@crawlee/playwright';
 import { logger } from '../logger.js';
 import { validateUrlSafety } from '../utils/ssrf.js';
+import { PageLoader } from '../utils/pageLoader.js';
 import { createPageLoader } from '../utils/pageLoader.js';
 
 export class CrawleeService {
@@ -141,12 +142,52 @@ export class CrawleeService {
 
       logger.info({ url, mode: 'adaptive' }, 'Starting Crawlee fetch');
 
-      // Clear previous results and reinitialize crawler to avoid state issues
+      // Clear previous results
       this.results.clear();
-      this.initializeCrawler();
+      
+      // Create a new crawler instance for each request to avoid state issues
+      const crawlerConfig = {
+        maxRequestRetries: this.config.maxRetries || 3,
+        requestHandlerTimeoutSecs: 60,
+        
+        // Browser pool configuration
+        browserPoolOptions: {
+          useFingerprints: true,
+          maxOpenPagesPerBrowser: 1,
+        },
+        
+        // Proxy configuration
+        proxyConfiguration: this.createProxyConfiguration(),
+        
+        // Request handler
+        requestHandler: async ({ request, page, response }) => {
+          logger.info({ url: request.url }, 'Processing request with Crawlee');
+          
+          const pageLoader = new PageLoader({
+            maxWaitTime: 30000,
+            strategies: ['networkIdle', 'domContentLoaded'],
+          });
+          
+          const result = await pageLoader.waitForPageLoad(page, request.url);
+          
+          // Store result
+          this.results.set(request.url, {
+            html: result.content,
+            status: response?.status || 200,
+            metadata: result.metrics,
+          });
+        },
+        
+        // Failed request handler
+        failedRequestHandler: async ({ request }) => {
+          logger.error({ url: request.url }, 'Request failed after all retries');
+        },
+      };
+
+      const crawler = new AdaptivePlaywrightCrawler(crawlerConfig);
       
       // Add request to crawler
-      await this.crawler.addRequests([{
+      await crawler.addRequests([{
         url,
         userData: {
           mode: options.mode || 'adaptive',
@@ -155,7 +196,7 @@ export class CrawleeService {
       }]);
 
       // Run the crawler
-      await this.crawler.run();
+      await crawler.run();
 
       // Retrieve result from temporary storage
       const result = this.results.get(url);

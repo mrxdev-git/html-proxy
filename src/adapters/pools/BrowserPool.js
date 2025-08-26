@@ -64,15 +64,21 @@ class BrowserPool extends ResourcePool {
             });
             
             // Create browser context with fingerprint
-            const context = await browser.newContext({
+            const contextOptions = {
                 ...this.contextOptions,
                 viewport: fingerprint.viewport,
                 userAgent: fingerprint.userAgent,
                 locale: fingerprint.locale,
                 timezoneId: fingerprint.timezone,
-                permissions: fingerprint.permissions,
-                geolocation: fingerprint.geolocation
-            });
+                permissions: fingerprint.permissions
+            };
+            
+            // Only add geolocation if it's not null
+            if (fingerprint.geolocation) {
+                contextOptions.geolocation = fingerprint.geolocation;
+            }
+            
+            const context = await browser.newContext(contextOptions);
             
             // Apply stealth measures
             if (this.stealthMode) {

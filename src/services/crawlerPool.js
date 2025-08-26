@@ -368,6 +368,9 @@ export class CrawlerPool extends EventEmitter {
           maxOpenPagesPerBrowser: 1,
         },
         
+        // Proxy configuration if available
+        proxyConfiguration: this.createProxyConfiguration(),
+        
         // Single request handler
         requestHandler: this.createRequestHandler(crawlerId),
         failedRequestHandler: this.createFailedRequestHandler(crawlerId),
@@ -379,7 +382,7 @@ export class CrawlerPool extends EventEmitter {
       const crawler = new PlaywrightCrawler(crawlerConfig);
       logger.debug({ crawlerId }, 'processQueue: Created PlaywrightCrawler instance');
       
-      // Add the single request
+      // Add request directly to the crawler
       await crawler.addRequests([{
         url: request.url,
         userData: {
@@ -389,13 +392,18 @@ export class CrawlerPool extends EventEmitter {
       }]);
       logger.debug({ crawlerId, requestId: request.requestId }, 'processQueue: Added request to crawler');
       
-      // Run the crawler (this will only be called once for this instance)
+      // Run the crawler (this will process the request)
       logger.info({ crawlerId, requestId: request.requestId }, 'processQueue: About to call crawler.run()');
       await crawler.run();
       logger.info({ crawlerId, requestId: request.requestId }, 'processQueue: crawler.run() completed');
       
       // Update stats
       this.stats.totalRequests++;
+      
+      // Clean up the crawler
+      if (crawler.browserPool) {
+        await crawler.browserPool.destroy();
+      }
       
     } catch (error) {
       logger.error({ error: error.message, url: request.url }, 'Error processing request');
@@ -495,7 +503,7 @@ export class CrawlerPool extends EventEmitter {
       const memoryPressure = memoryUsage.heapUsed / memoryUsage.heapTotal;
       
       // Only trigger emergency cleanup if memory pressure is very high AND we have crawlers to clean
-      if (memoryPressure > 0.90 && this.crawlers.size > 1) {
+      if (memoryPressure > 0.95 && this.crawlers.size > 1) {
         logger.warn({ memoryPressure, memoryUsage }, 'Critical memory pressure detected, performing emergency cleanup');
         await this.performEmergencyCleanup();
       }
@@ -515,12 +523,12 @@ export class CrawlerPool extends EventEmitter {
       await this.cleanupOldBrowserContexts();
       
       // Force garbage collection under memory pressure
-      if (memoryPressure > 0.85 && global.gc) {
+      if (memoryPressure > 0.90 && global.gc) {
         global.gc();
       }
       
       // Log stats with memory info (less verbose)
-      if (memoryPressure > 0.80) {
+      if (memoryPressure > 0.90) {
         logger.warn({ 
           stats: this.stats, 
           memoryPressure: Math.round(memoryPressure * 100),

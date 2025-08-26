@@ -34,7 +34,8 @@
     "puppeteer": "^24.17.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "undici": "^7.15.0"
+    "undici": "^7.15.0",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
