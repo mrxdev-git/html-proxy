@@ -1,5 +1,4 @@
 import express from 'express';
-import { getConfig } from './config/index.js';
 import { FetcherService } from './services/fetcherService.js';
 import { logger, verbose } from './logger.js';
 import { getMonitoringService } from './services/monitoringService.js';

@@ -20,7 +20,7 @@ export class CrawleeBrowserAdapter extends BaseAdapter {
       const result = await this.crawlerPool.processRequest(url, options);
       
       if (!result || !result.html) {
-        logger.error({ url }, 'No data retrieved from browser crawler pool');
+        logger.error({ url, result }, 'No data retrieved from browser crawler pool');
         throw new Error('No data retrieved from browser crawler pool');
       }
       
@@ -30,7 +30,12 @@ export class CrawleeBrowserAdapter extends BaseAdapter {
       };
 
     } catch (error) {
-      logger.error({ url, error: error.message }, 'Crawlee browser pool fetch failed');
+      logger.error({ 
+        url, 
+        error: error.message,
+        stack: error.stack,
+        type: error.constructor.name
+      }, 'Crawlee browser pool fetch failed - detailed error');
       throw error;
     }
   }

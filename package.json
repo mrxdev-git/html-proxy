@@ -4,9 +4,10 @@
   "description": "Robust HTML fetcher API and CLI with HTTP/Headless adapters and proxy rotation",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "start:verbose": "node src/start.js --verbose",
-    "dev": "cross-env NODE_ENV=development VERBOSE=true node src/index.js",
+    "start": "node src/main.js",
+    "start:verbose": "node src/main.js --verbose",
+    "dev": "node src/main.js --dev",
+    "prod": "node src/main.js --prod",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watchAll"
   },

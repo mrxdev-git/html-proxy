@@ -1,6 +1,7 @@
 import { AdaptivePlaywrightCrawler, Dataset } from 'crawlee';
 import { logger } from '../logger.js';
 import { validateUrlSafety } from '../utils/ssrf.js';
+import { createPageLoader } from '../utils/pageLoader.js';
 
 export class CrawleeService {
   constructor(config) {
@@ -11,8 +12,9 @@ export class CrawleeService {
   }
 
   initializeCrawler() {
-    // Store reference to results map for use in request handler
+    // Store reference to results map and loading strategy for use in request handler
     const resultsMap = this.results;
+    const loadingStrategy = this.config.loadingStrategy || 'thorough';
     
     const crawlerConfig = {
       // Adaptive crawler automatically switches between HTTP and browser
@@ -36,7 +38,7 @@ export class CrawleeService {
       proxyConfiguration: this.createProxyConfiguration(),
 
       // Request timeout
-      requestHandlerTimeoutSecs: Math.floor(this.config.timeoutMs / 1000) || 20,
+      requestHandlerTimeoutSecs: Math.floor(this.config.timeoutMs / 1000) || 30,
 
       // Retry configuration
       maxRequestRetries: this.config.maxRetries || 2,
@@ -46,11 +48,12 @@ export class CrawleeService {
         try {
           logger.info({ url: request.url }, 'Processing request with Crawlee');
           
-          // Wait for page to be fully loaded
-          await page.waitForLoadState('networkidle', { timeout: 10000 });
+          // Create page loader with configuration
+          const pageLoader = createPageLoader(loadingStrategy);
+          pageLoader.options.maxWaitTime = crawlerConfig.requestHandlerTimeoutSecs * 1000;
           
-          // Get the HTML content
-          const html = await page.content();
+          // Use advanced page loading detection
+          const loadResult = await pageLoader.waitForPageLoad(page, request.url);
           
           // Get status code safely - AdaptivePlaywrightCrawler may not provide response object
           let statusCode = 200; // Default to 200 for successful requests
@@ -64,14 +67,28 @@ export class CrawleeService {
             }
           }
           
-          // Store result in temporary map (avoid Dataset.pushData restriction)
+          // Use the best available content
+          const html = loadResult.content;
+          
+          // Store result in temporary map with enhanced metrics
           const resultData = {
             url: request.url,
             html,
             status: statusCode,
             timestamp: new Date().toISOString(),
+            metrics: loadResult.metrics,
+            success: loadResult.success,
+            fallback: loadResult.fallback,
+            capturedVersions: loadResult.capturedVersions?.length || 0,
           };
           resultsMap.set(request.url, resultData);
+          
+          logger.info({
+            url: request.url,
+            contentLength: html.length,
+            loadingMetrics: loadResult.metrics,
+            success: loadResult.success
+          }, 'Page content captured');
 
           return { html, status: statusCode };
         } catch (error) {

@@ -204,6 +204,10 @@ export class CacheService {
    * Start cleanup interval
    */
   startCleanup() {
+    // Clear any existing interval first
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
     }, this.config.checkInterval);
@@ -230,6 +234,7 @@ export class CacheService {
       misses: 0,
       evictions: 0,
       expired: 0,
+      size: 0,
     };
   }
 

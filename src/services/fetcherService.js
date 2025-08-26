@@ -69,15 +69,20 @@ export class FetcherService {
     }
 
     // Use specific adapters for other modes
+    logger.debug({ requestedMode }, 'About to pick adapter');
     const adapter = this.pickAdapter(requestedMode);
+    logger.debug({ adapter: adapter?.constructor?.name, requestedMode }, 'Adapter selected');
 
     // Enhanced retry strategy with intelligent fallback
     const maxAttempts = Math.max(1, this.config.maxRetries + 1);
     let lastErr;
     
+    logger.debug({ maxAttempts, configRetries: this.config.maxRetries }, 'Retry configuration');
+    
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const proxy = this.proxyPool.size() > 0 ? this.proxyPool.next() : null;
       try {
+        logger.debug({ attempt: attempt + 1, url: safeUrl.href, adapter: adapter?.constructor?.name }, 'About to call adapter.fetch');
         const res = await adapter.fetch(safeUrl.href, { proxy, headers });
         if (proxy) this.proxyPool.reportSuccess(proxy);
         
@@ -90,7 +95,14 @@ export class FetcherService {
       } catch (e) {
         if (proxy) this.proxyPool.reportFailure(proxy);
         lastErr = e;
-        logger.warn({ attempt: attempt + 1, proxy, err: e.message }, 'Fetch attempt failed');
+        logger.warn({ 
+          attempt: attempt + 1, 
+          proxy, 
+          err: e.message,
+          stack: e.stack,
+          adapter: adapter.constructor.name,
+          url: safeUrl.href
+        }, 'Fetch attempt failed');
         
         // Intelligent fallback: if Crawlee adapter fails, try legacy adapter
         if (attempt === maxAttempts - 1 && requestedMode.startsWith('crawlee-')) {
@@ -116,6 +128,7 @@ export class FetcherService {
         if (attempt === maxAttempts - 1) break;
       }
     }
+    logger.error({ lastErr: lastErr?.message, lastErrStack: lastErr?.stack }, 'All fetch attempts failed');
     throw lastErr || new Error('Fetch failed');
   }
 

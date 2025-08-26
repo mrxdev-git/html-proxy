@@ -1,6 +1,7 @@
 import { PlaywrightCrawler, CheerioCrawler, Configuration } from 'crawlee';
 import { logger } from '../logger.js';
 import EventEmitter from 'events';
+import { createPageLoader } from '../utils/pageLoader.js';
 
 /**
  * CrawlerPool - Manages a pool of crawler instances for maximum performance
@@ -12,12 +13,16 @@ import EventEmitter from 'events';
  * - Circuit breaker pattern
  */
 export class CrawlerPool extends EventEmitter {
-  constructor(config) {
+  constructor(config = {}) {
     super();
     this.config = config;
     this.crawlers = new Map(); // Pool of active crawlers
     this.browserContexts = new Map(); // Reusable browser contexts
     this.requestQueue = []; // Pending requests
+    this.pendingRequests = new Map();
+    this.batchQueue = [];
+    this.batchTimer = null;
+    this.isDestroyed = false; // Pending requests
     this.processing = new Map(); // Currently processing requests
     this.stats = {
       totalRequests: 0,
@@ -46,6 +51,7 @@ export class CrawlerPool extends EventEmitter {
       requestTimeout: config.requestTimeout || 30000,
       batchSize: config.batchSize || 10,
       batchTimeout: config.batchTimeout || 100, // 100ms
+      loadingStrategy: config.loadingStrategy || 'balanced', // Page loading strategy
     };
 
     // Initialize pool
@@ -79,16 +85,24 @@ export class CrawlerPool extends EventEmitter {
           },
         },
 
-        // Browser pool configuration
+        // Browser pool configuration with memory limits
         browserPoolOptions: {
           useFingerprints: true,
-          maxOpenPagesPerBrowser: 5,
-          retireBrowserAfterPageCount: 100,
-          // Reuse browser contexts for performance
+          maxOpenPagesPerBrowser: 2, // Reduced for memory efficiency
+          retireBrowserAfterPageCount: 30, // Reduced for memory efficiency
+          // Cleanup hooks for memory management
           preLaunchHooks: [
             async (pageId, browserController) => {
-              // Cache browser context for reuse
-              this.browserContexts.set(pageId, browserController);
+              // Cache browser context with cleanup tracking
+              this.browserContexts.set(pageId, {
+                controller: browserController,
+                created: Date.now(),
+              });
+              
+              // Clean old contexts if too many
+              if (this.browserContexts.size > 5) {
+                await this.cleanupOldBrowserContexts();
+              }
             },
           ],
         },
@@ -135,18 +149,28 @@ export class CrawlerPool extends EventEmitter {
         // Apply stealth measures
         await this.applyStealth(page);
         
+        // Create page loader with pool configuration
+        const pageLoader = createPageLoader(this.poolConfig.loadingStrategy);
+        pageLoader.options.maxWaitTime = this.poolConfig.requestTimeout;
+        
+        // Use advanced page loading detection
+        const loadResult = await pageLoader.waitForPageLoad(page, request.url);
+        
         // Get response status
         const status = response ? response.status() : 200;
         
-        // Get HTML content
-        const html = await page.content();
+        // Use the best available content
+        const html = loadResult.content;
         
-        // Store result
+        // Store result with enhanced metrics
         const result = {
           html,
           status,
           crawlerId,
           responseTime: Date.now() - startTime,
+          loadingMetrics: loadResult.metrics,
+          success: loadResult.success,
+          fallback: loadResult.fallback,
         };
         
         // Emit result event
@@ -158,8 +182,36 @@ export class CrawlerPool extends EventEmitter {
         // Update circuit breaker
         this.recordSuccess();
         
+        logger.debug({ 
+          crawlerId, 
+          requestId, 
+          contentLength: html.length,
+          metrics: loadResult.metrics 
+        }, 'Request completed');
+        
       } catch (error) {
         logger.error({ crawlerId, requestId, error: error.message }, 'Request handler error');
+        
+        // Try to emit partial content if available
+        try {
+          const partialContent = await page.content();
+          if (partialContent && partialContent.length > 100) {
+            const partialResult = {
+              html: partialContent,
+              status: 0,
+              crawlerId,
+              responseTime: Date.now() - startTime,
+              partial: true,
+              error: error.message,
+            };
+            this.emit(`result:${requestId}`, partialResult);
+            logger.info({ requestId, contentLength: partialContent.length }, 'Returning partial content after error');
+            return; // Don't throw, we have partial content
+          }
+        } catch (contentError) {
+          logger.debug('Could not retrieve partial content');
+        }
+        
         this.emit(`error:${requestId}`, error);
         
         // Update stats
@@ -221,6 +273,8 @@ export class CrawlerPool extends EventEmitter {
    * Process a URL request using the pool
    */
   async processRequest(url, options = {}) {
+    logger.info({ url, options }, 'CrawlerPool.processRequest called');
+    
     // Check circuit breaker
     if (this.circuitBreaker.state === 'OPEN') {
       if (Date.now() - this.circuitBreaker.lastFailTime > this.circuitBreaker.timeout) {
@@ -233,26 +287,38 @@ export class CrawlerPool extends EventEmitter {
     }
     
     const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    logger.debug({ requestId, url }, 'Created request ID');
     
     return new Promise((resolve, reject) => {
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        logger.error({ requestId, url }, 'Request timed out after 30 seconds');
+        cleanup();
+        reject(new Error(`Request timeout for URL: ${url}`));
+      }, this.poolConfig.requestTimeout || 30000);
+      
       // Set up event listeners for this request
       const cleanup = () => {
+        clearTimeout(timeout);
         this.removeAllListeners(`result:${requestId}`);
         this.removeAllListeners(`error:${requestId}`);
         this.removeAllListeners(`failed:${requestId}`);
       };
       
       this.once(`result:${requestId}`, (result) => {
+        logger.debug({ requestId }, 'Received result event');
         cleanup();
         resolve(result);
       });
       
       this.once(`error:${requestId}`, (error) => {
+        logger.error({ requestId, error: error.message }, 'Received error event');
         cleanup();
         reject(error);
       });
       
       this.once(`failed:${requestId}`, (error) => {
+        logger.error({ requestId, error: error.message }, 'Received failed event');
         cleanup();
         reject(error);
       });
@@ -265,57 +331,80 @@ export class CrawlerPool extends EventEmitter {
         timestamp: Date.now(),
       });
       
-      // Process queue
-      this.processQueue();
+      logger.debug({ requestId, queueLength: this.requestQueue.length }, 'Added to queue');
+      
+      // Process queue - don't await since we're returning the promise with event listeners
+      setImmediate(() => this.processQueue());
     });
   }
 
   async processQueue() {
-    // Check if we have available crawlers
-    const availableCrawler = this.getAvailableCrawler();
-    
-    if (!availableCrawler || this.requestQueue.length === 0) {
+    // Check if we have requests to process
+    if (this.requestQueue.length === 0) {
+      logger.debug('processQueue: No requests in queue');
       return;
     }
     
-    // Get batch of requests
-    const batch = this.requestQueue.splice(0, this.poolConfig.batchSize);
+    // Get a single request (we'll process one at a time to avoid the run() issue)
+    const request = this.requestQueue.shift();
     
-    // Mark crawler as busy
-    availableCrawler.status = 'BUSY';
-    availableCrawler.lastUsed = Date.now();
+    if (!request) {
+      logger.debug('processQueue: No request after shift');
+      return;
+    }
+    
+    const crawlerId = `temp-crawler-${Date.now()}`;
+    logger.info({ crawlerId, requestId: request.requestId, url: request.url }, 'processQueue: Starting to process request');
     
     try {
-      // Add requests to crawler
-      const crawlerRequests = batch.map(req => ({
-        url: req.url,
-        userData: {
-          requestId: req.requestId,
-          ...req.options,
+      // Create a fresh crawler instance for this request
+      const crawlerConfig = {
+        maxRequestRetries: 2,
+        requestHandlerTimeoutSecs: 30,
+        
+        // Browser pool configuration
+        browserPoolOptions: {
+          useFingerprints: true,
+          maxOpenPagesPerBrowser: 1,
         },
-      }));
+        
+        // Single request handler
+        requestHandler: this.createRequestHandler(crawlerId),
+        failedRequestHandler: this.createFailedRequestHandler(crawlerId),
+      };
       
-      await availableCrawler.crawler.addRequests(crawlerRequests);
+      logger.debug({ crawlerId }, 'processQueue: Created crawler config');
       
-      // Run crawler
-      await availableCrawler.crawler.run();
+      // Create new crawler instance
+      const crawler = new PlaywrightCrawler(crawlerConfig);
+      logger.debug({ crawlerId }, 'processQueue: Created PlaywrightCrawler instance');
       
-      // Update request count
-      availableCrawler.requestCount += batch.length;
+      // Add the single request
+      await crawler.addRequests([{
+        url: request.url,
+        userData: {
+          requestId: request.requestId,
+          ...request.options,
+        },
+      }]);
+      logger.debug({ crawlerId, requestId: request.requestId }, 'processQueue: Added request to crawler');
+      
+      // Run the crawler (this will only be called once for this instance)
+      logger.info({ crawlerId, requestId: request.requestId }, 'processQueue: About to call crawler.run()');
+      await crawler.run();
+      logger.info({ crawlerId, requestId: request.requestId }, 'processQueue: crawler.run() completed');
+      
+      // Update stats
+      this.stats.totalRequests++;
       
     } catch (error) {
-      logger.error({ error: error.message }, 'Error processing batch');
+      logger.error({ error: error.message, url: request.url }, 'Error processing request');
       
-      // Emit errors for all requests in batch
-      batch.forEach(req => {
-        this.emit(`error:${req.requestId}`, error);
-      });
+      // Emit error for this request
+      this.emit(`error:${request.requestId}`, error);
     } finally {
-      // Mark crawler as idle
-      availableCrawler.status = 'IDLE';
-      
       // Continue processing queue if there are more requests
-      if (this.requestQueue.length > 0) {
+      if (this.requestQueue.length > 0 && !this.isDestroyed) {
         setImmediate(() => this.processQueue());
       }
     }
@@ -391,26 +480,61 @@ export class CrawlerPool extends EventEmitter {
     this.stats.queueLength = this.requestQueue.length;
   }
 
-  // Monitoring
+  // Enhanced monitoring with memory pressure detection
   startMonitoring() {
-    this.monitoringInterval = setInterval(() => {
-      // Clean up idle crawlers
+    // Clear any existing interval first
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+    }
+    
+    this.monitoringInterval = setInterval(async () => {
       const now = Date.now();
       
+      // Check memory pressure
+      const memoryUsage = process.memoryUsage();
+      const memoryPressure = memoryUsage.heapUsed / memoryUsage.heapTotal;
+      
+      // Only trigger emergency cleanup if memory pressure is very high AND we have crawlers to clean
+      if (memoryPressure > 0.90 && this.crawlers.size > 1) {
+        logger.warn({ memoryPressure, memoryUsage }, 'Critical memory pressure detected, performing emergency cleanup');
+        await this.performEmergencyCleanup();
+      }
+      
+      // Clean up idle crawlers (but keep at least 1)
       for (const [id, crawler] of this.crawlers) {
         if (
           crawler.status === 'IDLE' &&
           now - crawler.lastUsed > this.poolConfig.idleTimeout &&
           this.crawlers.size > this.poolConfig.minSize
         ) {
-          this.removeCrawler(id);
+          await this.removeCrawler(id);
         }
       }
       
-      // Log stats
-      logger.info({ stats: this.stats }, 'Crawler pool stats');
+      // Clean up old browser contexts
+      await this.cleanupOldBrowserContexts();
       
-    }, 30000); // Every 30 seconds
+      // Force garbage collection under memory pressure
+      if (memoryPressure > 0.85 && global.gc) {
+        global.gc();
+      }
+      
+      // Log stats with memory info (less verbose)
+      if (memoryPressure > 0.80) {
+        logger.warn({ 
+          stats: this.stats, 
+          memoryPressure: Math.round(memoryPressure * 100),
+          browserContexts: this.browserContexts.size 
+        }, 'Crawler pool stats - high memory pressure');
+      } else {
+        logger.debug({ 
+          stats: this.stats, 
+          memoryPressure: Math.round(memoryPressure * 100),
+          browserContexts: this.browserContexts.size 
+        }, 'Crawler pool stats');
+      }
+      
+    }, 30000); // Every 30 seconds (less frequent to reduce overhead)
   }
   
   // Stop monitoring
@@ -421,9 +545,86 @@ export class CrawlerPool extends EventEmitter {
     }
   }
   
+  // Enhanced cleanup methods
+  async cleanupOldBrowserContexts() {
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minutes
+    
+    for (const [pageId, context] of this.browserContexts) {
+      if (now - context.created > maxAge) {
+        try {
+          if (context.controller && typeof context.controller.close === 'function') {
+            await context.controller.close();
+          }
+        } catch (error) {
+          logger.warn({ pageId, error: error.message }, 'Error closing browser context');
+        }
+        this.browserContexts.delete(pageId);
+      }
+    }
+  }
+  
+  async performEmergencyCleanup() {
+    logger.warn('Performing emergency memory cleanup');
+    
+    // Close all idle crawlers immediately
+    const idleCrawlers = Array.from(this.crawlers.entries())
+      .filter(([_, crawler]) => crawler.status === 'IDLE');
+    
+    for (const [id, _] of idleCrawlers) {
+      await this.removeCrawler(id);
+    }
+    
+    // Clear all browser contexts
+    for (const [pageId, context] of this.browserContexts) {
+      try {
+        if (context.controller && typeof context.controller.close === 'function') {
+          await context.controller.close();
+        }
+      } catch (error) {
+        logger.warn({ pageId }, 'Error during emergency context cleanup');
+      }
+    }
+    this.browserContexts.clear();
+    
+    // Clear request queue if too large
+    if (this.requestQueue.length > 50) {
+      this.requestQueue = this.requestQueue.slice(0, 10);
+      logger.warn('Cleared request queue due to memory pressure');
+    }
+    
+    // Force garbage collection
+    if (global.gc) {
+      global.gc();
+    }
+    
+    // Recreate minimum crawlers after cleanup
+    if (this.crawlers.size === 0 && !this.isDestroyed) {
+      logger.info('Recreating minimum crawlers after emergency cleanup');
+      try {
+        await this.createCrawler('emergency-crawler-0');
+      } catch (error) {
+        logger.error({ error: error.message }, 'Failed to recreate crawler after emergency cleanup');
+      }
+    }
+  }
+
   // Destroy the pool and clean up all resources
   async destroy() {
-    this.stopMonitoring();
+    logger.info('Destroying crawler pool');
+    this.isDestroyed = true;
+    
+    // Stop monitoring
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+    
+    // Clear batch timer
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
     
     // Stop accepting new requests
     this.circuitBreaker.state = 'OPEN';
@@ -431,14 +632,21 @@ export class CrawlerPool extends EventEmitter {
     // Clear the queue
     this.requestQueue = [];
     
-    // Destroy all crawlers
-    for (const crawler of this.crawlers.values()) {
+    // Destroy all crawlers with proper cleanup
+    const destroyPromises = [];
+    for (const [id, crawler] of this.crawlers) {
+      destroyPromises.push(this.removeCrawler(id));
+    }
+    await Promise.allSettled(destroyPromises);
+    
+    // Clean up all browser contexts
+    for (const [pageId, context] of this.browserContexts) {
       try {
-        if (crawler && crawler.crawler && typeof crawler.crawler.teardown === 'function') {
-          await crawler.crawler.teardown();
+        if (context.controller && typeof context.controller.close === 'function') {
+          await context.controller.close();
         }
       } catch (error) {
-        logger.error({ error: error.message }, 'Error tearing down crawler');
+        logger.warn({ pageId, error: error.message }, 'Error closing browser context during destroy');
       }
     }
     
@@ -446,6 +654,11 @@ export class CrawlerPool extends EventEmitter {
     this.browserContexts.clear();
     this.processing.clear();
     this.removeAllListeners();
+    
+    // Force garbage collection
+    if (global.gc) {
+      global.gc();
+    }
   }
 
   async removeCrawler(id) {
@@ -453,11 +666,25 @@ export class CrawlerPool extends EventEmitter {
     
     if (crawler) {
       try {
-        if (crawler.crawler && typeof crawler.crawler.teardown === 'function') {
-          await crawler.crawler.teardown();
+        // Properly close Crawlee crawler using the correct methods
+        if (crawler.crawler) {
+          // Stop the crawler if it's running
+          if (typeof crawler.crawler.stop === 'function') {
+            await crawler.crawler.stop();
+          }
+          
+          // Close browser pool if available
+          if (crawler.crawler.browserPool && typeof crawler.crawler.browserPool.destroy === 'function') {
+            await crawler.crawler.browserPool.destroy();
+          }
+          
+          // Close session pool if available
+          if (crawler.crawler.sessionPool && typeof crawler.crawler.sessionPool.teardown === 'function') {
+            await crawler.crawler.sessionPool.teardown();
+          }
         }
       } catch (error) {
-        logger.warn({ id, error: error.message }, 'Error during crawler teardown');
+        logger.warn({ id, error: error.message }, 'Error during crawler cleanup');
       }
       
       this.crawlers.delete(id);

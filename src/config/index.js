@@ -42,12 +42,22 @@ export function getConfig() {
   const cfg = {
     port: parseNumber(process.env.PORT, 8080),
     defaultMode: (process.env.DEFAULT_MODE || 'http').toLowerCase(),
-    timeoutMs: parseNumber(process.env.TIMEOUT_MS, 20000),
+    
+    // Timeout settings
+    timeoutMs: parseInt(process.env.TIMEOUT_MS || '20000'),
     maxRetries: parseNumber(process.env.MAX_RETRIES, 2),
-    userAgent:
-      process.env.USER_AGENT ||
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    
+    // Page loading strategy: 'fast', 'balanced', 'thorough', or 'custom'
+    loadingStrategy: process.env.LOADING_STRATEGY || 'balanced',
+    
+    // Browser settings
     headless: parseBool(process.env.HEADLESS, true),
+    userAgent: process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    
+    // Advanced loading detection settings
+    progressiveCapture: process.env.PROGRESSIVE_CAPTURE !== 'false',
+    jsCompletionTimeout: parseInt(process.env.JS_COMPLETION_TIMEOUT || '5000'),
+    networkIdleTimeout: parseInt(process.env.NETWORK_IDLE_TIMEOUT || '2000'),
     concurrency: parseNumber(process.env.CONCURRENCY, 100),
     proxies: loadProxies(),
     allowPrivateNetworks: parseBool(process.env.ALLOW_PRIVATE_NETWORKS, false),

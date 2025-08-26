@@ -147,9 +147,13 @@ export class MonitoringService {
   }
 
   /**
-   * Start periodic collection
+   * Start collecting metrics
    */
   startCollection() {
+    // Clear any existing interval first
+    if (this.collectionInterval) {
+      clearInterval(this.collectionInterval);
+    }
     // Collect system metrics every 30 seconds
     this.collectionInterval = setInterval(() => {
       this.collectSystemMetrics();
@@ -160,7 +164,7 @@ export class MonitoringService {
   }
 
   /**
-   * Stop collection
+   * Stop collecting metrics
    */
   stopCollection() {
     if (this.collectionInterval) {
@@ -174,7 +178,31 @@ export class MonitoringService {
    */
   destroy() {
     this.stopCollection();
-    this.reset();
+    this.metrics = {
+      requests: {
+        total: 0,
+        successful: 0,
+        failed: 0,
+        cached: 0,
+        avgResponseTime: 0,
+        p95ResponseTime: 0,
+        p99ResponseTime: 0,
+      },
+      system: {
+        memoryUsage: {},
+        cpuUsage: [],
+        uptime: 0,
+      },
+      adapters: {
+        http: { requests: 0, failures: 0 },
+        browser: { requests: 0, failures: 0 },
+        'crawlee-http': { requests: 0, failures: 0 },
+        'crawlee-browser': { requests: 0, failures: 0 },
+        adaptive: { requests: 0, failures: 0 },
+      },
+      errors: [],
+      responseTimes: [],
+    };
   }
 
   /**

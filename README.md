@@ -128,6 +128,23 @@ MAX_CRAWLERS=5
 CRAWLER_IDLE_TIMEOUT_MS=300000
 ```
 
+#### Page Loading Strategies
+```env
+# Loading Detection Strategies
+LOADING_STRATEGY=adaptive  # Options: adaptive, fast, thorough, custom
+WAIT_STRATEGIES=load,domcontentloaded,networkidle  # Comma-separated list
+
+# Progressive Content Capture
+PROGRESSIVE_CAPTURE=true  # Enable progressive content capture
+PROGRESSIVE_INTERVAL_MS=2000  # Capture interval
+PROGRESSIVE_MAX_CAPTURES=5  # Maximum capture attempts
+
+# Advanced Wait Conditions
+JS_COMPLETION_TIMEOUT=5000  # Wait for JS execution to complete
+NETWORK_IDLE_TIMEOUT=3000  # Wait for network to be idle
+WAIT_FOR_ELEMENT=#content  # CSS selector to wait for
+```
+
 ### Running the Service
 
 #### Logging Modes
